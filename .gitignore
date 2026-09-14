@@ -1,5 +1,6 @@
-# Credentials and local configuration
+# Env
 .env
+.env.local
 .env.*
 !.env.example
 *.pem
@@ -7,7 +8,7 @@
 
 # Python
 __pycache__/
-*.py[cod]
+*.pyc
 .venv/
 venv/
 *.egg-info/
@@ -15,23 +16,30 @@ venv/
 .mypy_cache/
 .ruff_cache/
 
-# JavaScript and build output
+# Node
 node_modules/
 dist/
 .vite/
-coverage/
 *.tsbuildinfo
+coverage/
 
-# Local data and database artifacts
-.local/
-tmp/
-backups/
-*.db
-*.sqlite*
-*.ses
-*.log
-
-# Editor and operating system files
+# IDE
 .idea/
 .vscode/
+
+# Native local-service data
+.local/
+tmp/
+backend/piper-voices/
+*.ses
+*.db
+*.sqlite*
+*.log
+
+# OS
 .DS_Store
+
+# Docker volumes are named, not bind-mounted — nothing to ignore there.
+
+# Database backups (make backup) — contain full candidate data, never committed.
+backups/

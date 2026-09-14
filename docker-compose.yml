@@ -1,0 +1,196 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: hiring
+      POSTGRES_PASSWORD: hiring
+      POSTGRES_DB: hiring
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U hiring -d hiring"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  minio:
+    image: minio/minio:latest
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - minio_data:/data
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  ollama:
+    image: ollama/ollama:latest
+    ports:
+      - "11434:11434"
+    environment:
+      # Ollama unloads an idle model after its default 5m keep_alive, and
+      # reloading it from disk on this CPU-only host takes ~90s — far past
+      # the 20s timeout FallbackLLMProvider gives it, so any request after
+      # an idle gap fails outright. Keeping it resident indefinitely once
+      # loaded avoids that cold-load path entirely.
+      OLLAMA_KEEP_ALIVE: "-1"
+    volumes:
+      - ollama_data:/root/.ollama
+    healthcheck:
+      test: ["CMD-SHELL", "ollama list >/dev/null 2>&1"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  # One-shot: pulls the model app/core/config.py's OLLAMA_MODEL (see .env)
+  # expects into the `ollama` service's volume, so it's actually there the
+  # first time something needs it — either as the LLM_PROVIDER=ollama
+  # primary, or as FallbackLLMProvider's fallback when Groq is rate-limited
+  # (see app/providers/llm/fallback.py). Talks to the sibling `ollama`
+  # service over HTTP rather than running its own server. Runs once per
+  # `docker compose up`; a model already present is a fast no-op, so this
+  # isn't worth gating api/worker startup on — they already degrade
+  # gracefully (a canned fallback question) if it hasn't finished yet.
+  ollama-pull:
+    image: ollama/ollama:latest
+    environment:
+      OLLAMA_HOST: ollama:11434
+    depends_on:
+      ollama:
+        condition: service_healthy
+    entrypoint: ["sh", "-c"]
+    # Pull, then immediately run a throwaway prompt so the model is loaded
+    # into memory (and, with OLLAMA_KEEP_ALIVE=-1 on the `ollama` service,
+    # stays there) before any real request arrives — otherwise the first
+    # interview of the day eats the ~90s cold-load cost on this CPU-only
+    # host and trips FallbackLLMProvider's 20s timeout.
+    command:
+      - >
+        ollama pull ${OLLAMA_MODEL:-llama3.2:1b} &&
+        ollama run ${OLLAMA_MODEL:-llama3.2:1b} "hi" --verbose=false
+    restart: "no"
+
+  piston:
+    image: ghcr.io/engineer-man/piston
+    # Piston's execution backend (`isolate`) needs to create directories and
+    # manage cgroups on what would otherwise be a read-only container fs —
+    # confirmed required by a Piston maintainer (github.com/engineer-man/
+    # piston/issues/696), not optional hardening we can drop.
+    privileged: true
+    # Piston's own server-side ceilings default to run_timeout=3000ms/
+    # run_cpu_time=3000ms — lower than what app/core/config.py's
+    # piston_run_timeout_ms (10000) requests, so /execute rejects it with a
+    # 400 unless raised here to match. compile_timeout's 10000ms default
+    # ceiling already matches and needs no override.
+    environment:
+      PISTON_RUN_TIMEOUT: "10000"
+      PISTON_RUN_CPU_TIME: "10000"
+    ports:
+      - "2000:2000"
+    volumes:
+      - piston_packages:/piston/packages
+    tmpfs:
+      - /tmp:exec
+    # Piston's server itself runs on Node, so `node` is guaranteed present in
+    # the image even though we can't assume curl/wget are.
+    healthcheck:
+      test:
+        - "CMD-SHELL"
+        - "node -e \"require('http').get('http://localhost:2000/api/v2/runtimes',r=>process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1))\""
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  api:
+    build:
+      context: ./backend
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: postgresql+asyncpg://hiring:hiring@postgres:5432/hiring
+      REDIS_URL: redis://redis:6379/0
+      S3_ENDPOINT_URL: http://minio:9000
+      OLLAMA_URL: http://ollama:11434
+      PISTON_BASE_URL: http://piston:2000
+    ports:
+      - "8005:8000"
+    volumes:
+      - ./backend:/app
+      - whisper_models:/root/.cache/huggingface
+      - piper_voices:/opt/piper-voices
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+
+  worker:
+    build:
+      context: ./backend
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: postgresql+asyncpg://hiring:hiring@postgres:5432/hiring
+      REDIS_URL: redis://redis:6379/0
+      S3_ENDPOINT_URL: http://minio:9000
+      OLLAMA_URL: http://ollama:11434
+      PISTON_BASE_URL: http://piston:2000
+    volumes:
+      - ./backend:/app
+      - whisper_models:/root/.cache/huggingface
+      - piper_voices:/opt/piper-voices
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    command: arq app.workers.settings.WorkerSettings
+
+  web:
+    # Frontend source is published separately; opt in only when available.
+    profiles: ["frontend"]
+    build:
+      context: ./frontend
+    ports:
+      - "5173:5173"
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    environment:
+      VITE_API_URL: http://localhost:8005/api
+      # The REST API and the interview WebSocket are the same FastAPI process
+      # (see app/main.py — interview_ws_router is mounted on the main `app`),
+      # exposed together on host port 8005 via the api service's "8005:8000"
+      # mapping. Without this, wsClient.ts falls back to port 8000, which on
+      # this host belongs to an unrelated service, not this API.
+      VITE_WS_URL: ws://localhost:8005
+    command: npm run dev -- --host 0.0.0.0
+
+volumes:
+  postgres_data:
+  minio_data:
+  ollama_data:
+  piston_packages:
+  whisper_models:
+  piper_voices:
