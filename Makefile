@@ -1,4 +1,4 @@
-.PHONY: up down migrate migration seed test test-backend test-frontend lint lint-backend lint-frontend interview-cli interview-sim ollama-pull piston-setup logs backup restore-rehearsal
+.PHONY: up down migrate migration seed test test-backend test-frontend lint lint-backend lint-frontend interview-cli interview-sim ollama-pull logs backup restore-rehearsal
 
 up:
 	@test -f .env || cp .env.example .env
@@ -49,13 +49,6 @@ interview-sim:
 
 ollama-pull:
 	docker compose exec ollama ollama pull $(or $(model),llama3.2:1b)
-
-# Installs Python/Java/C# support into the `piston` sandbox container — it
-# ships with no languages preinstalled. Safe to rerun (skips already
-# installed packages). Run after `make up` and before using the coding
-# challenge feature.
-piston-setup:
-	docker compose exec api python -m app.cli.piston_setup
 
 # Phase 6 hardening — see runbooks/restore-from-backup.md for the full
 # procedure this automates and what to check when it's not a drill.

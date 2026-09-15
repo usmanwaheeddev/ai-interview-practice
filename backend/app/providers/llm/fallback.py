@@ -2,8 +2,8 @@
 
 Wraps the full `LLMProvider` surface so every caller that
 goes through `get_llm_provider()` — interview plan generation, the Director's
-follow-up judging, resume extraction, report scoring, and the coding-hint/
-review streaming — gets the same fallback with no per-call-site logic."""
+follow-up judging, resume extraction, and report scoring — gets the same
+fallback with no per-call-site logic."""
 
 import asyncio
 from collections.abc import AsyncIterator

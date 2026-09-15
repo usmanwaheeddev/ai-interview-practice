@@ -11,8 +11,6 @@ import { CreatePracticeInterviewPage } from "./features/practice/CreatePracticeI
 import { CreateLanguageInterviewPage } from "./features/practice/CreateLanguageInterviewPage";
 import { PracticeReportPage } from "./features/practice/PracticeReportPage";
 import { InterviewHistoryPage } from "./features/practice/InterviewHistoryPage";
-import { CodingQuestionListPage } from "./features/coding/CodingQuestionListPage";
-import { CodingQuestionPage } from "./features/coding/CodingQuestionPage";
 import { useAuth } from "./lib/auth";
 
 function HomeRoute() {
@@ -33,8 +31,6 @@ export function App() {
 
       <Route path="/practice/new" element={<ProtectedRoute><CreatePracticeInterviewPage /></ProtectedRoute>} />
       <Route path="/practice/language/new" element={<ProtectedRoute><CreateLanguageInterviewPage /></ProtectedRoute>} />
-      <Route path="/coding" element={<ProtectedRoute><CodingQuestionListPage /></ProtectedRoute>} />
-      <Route path="/coding/:slug" element={<ProtectedRoute><CodingQuestionPage /></ProtectedRoute>} />
       <Route path="/mock-interviews/:interviewId/report" element={<ProtectedRoute><PracticeReportPage /></ProtectedRoute>} />
       <Route
         path="/mock-interviews/:interviewId/preflight"

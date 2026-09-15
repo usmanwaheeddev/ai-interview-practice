@@ -20,7 +20,7 @@ class Settings(BaseSettings):
     s3_public_endpoint_url: str = "http://localhost:9000"
     s3_access_key: str = "minioadmin"
     s3_secret_key: str = "minioadmin"
-    s3_bucket: str = "hiring-interview"
+    s3_bucket: str = "ai-interview-practice"
     s3_region: str = "us-east-1"
 
     jwt_secret: str = "dev-only-change-me-this-must-be-at-least-32-bytes-long"
@@ -77,16 +77,6 @@ class Settings(BaseSettings):
     # back to espeak-ng instead of a downloaded voice model.
     piper_voice_hi: str = "hi_IN-pratham-medium"
     piper_voices_dir: str = "/opt/piper-voices"
-
-    # Coding-challenge execution sandbox — Phase 1 of the coding-challenge
-    # feature. See docker-compose.yml's `piston` service and
-    # Makefile's `piston-setup` target for the package install step.
-    execution_provider: str = "fake"
-    piston_base_url: str = "http://localhost:2000"
-    piston_compile_timeout_ms: int = 10000
-    piston_run_timeout_ms: int = 10000
-    piston_compile_memory_limit_bytes: int = 256 * 1024 * 1024
-    piston_run_memory_limit_bytes: int = 256 * 1024 * 1024
 
 
 @lru_cache

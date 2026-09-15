@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { Link, NavLink, useLocation } from "react-router-dom";
 import { useAuth } from "../../lib/auth";
 
-type IconName = "add" | "history" | "menu" | "panel" | "logout" | "language" | "code";
+type IconName = "add" | "history" | "menu" | "panel" | "logout" | "language";
 
 function Icon({ name, className = "h-5 w-5" }: { name: IconName; className?: string }) {
   const paths: Record<IconName, ReactNode> = {
@@ -12,7 +12,6 @@ function Icon({ name, className = "h-5 w-5" }: { name: IconName; className?: str
     panel: <path d="M4 5h16v14H4zM9 5v14" />,
     logout: <path d="M10 17l5-5-5-5m5 5H3m11-7h5a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2h-5" />,
     language: <path d="M4 5h9M8.5 3v2m0 0c0 4-1.5 8-5.5 10M6 8c1 3 3 5 6 6.5M14 21l4-9 4 9m-6.5-3h5" />,
-    code: <path d="M8 5l-6 7 6 7M16 5l6 7-6 7" />,
   };
 
   return (
@@ -35,7 +34,6 @@ const navigation = [
   { label: "New interview", to: "/practice/new", icon: "add" as const },
   { label: "Language interview", to: "/practice/language/new", icon: "language" as const },
   { label: "Interview history", to: "/mock-interviews", icon: "history" as const },
-  { label: "Coding challenges", to: "/coding", icon: "code" as const },
 ];
 
 export function AppLayout({

@@ -88,7 +88,7 @@ class FakeLLMProvider:
         self, *, system: str, user: str, max_tokens: int = 500
     ) -> AsyncIterator[str]:
         # Deterministic, chunked so callers exercise real incremental
-        # consumption (SSE framing, progressive Monaco inserts) without a
+        # consumption without a
         # real vendor call — same spirit as `complete`'s canned response.
         for chunk in f"[fake streamed completion for: {user[:60]}]".split(" "):
             yield chunk + " "

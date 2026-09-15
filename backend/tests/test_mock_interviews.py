@@ -129,13 +129,6 @@ async def test_only_new_schema_and_routes(client):
         "mock_interview_turns",
         "mock_media_assets",
         "mock_interview_scores",
-        "coding_questions",
-        "coding_test_cases",
-        "coding_submissions",
-        "coding_hint_configs",
-        "coding_hint_usages",
-        "coding_hint_logs",
-        "coding_review_logs",
     }
     assert set(Base.metadata.tables["users"].columns.keys()) == {
         "id",

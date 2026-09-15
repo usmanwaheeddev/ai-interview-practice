@@ -1,4 +1,3 @@
-from collections.abc import AsyncIterator
 from functools import lru_cache
 
 from app.core.config import get_settings
@@ -10,7 +9,7 @@ from app.providers.llm.fake import FakeLLMProvider
 def get_llm_provider() -> LLMProvider:
     """The single source of truth for "the" LLM provider — every caller
     (interview plan generation, the Director, resume extraction, report
-    scoring, coding-hint/review streaming) gets whatever this returns, so
+    scoring) gets whatever this returns, so
     wrapping it once here is enough to give all of them the same behavior.
 
     `LLM_PROVIDER` chooses which real provider is tried first. The other real
@@ -53,15 +52,3 @@ def get_llm_provider() -> LLMProvider:
         f"LLM provider '{settings.llm_provider}' is not wired up. "
         "Use 'fake', 'ollama' or 'groq' — see phases.md Phase 2 / architecture.md §7."
     )
-
-
-async def stream_complete_with_fallback(
-    *, system: str, user: str, max_tokens: int = 500
-) -> AsyncIterator[str]:
-    """Thin pass-through kept as the coding-challenge streaming routes'
-    stable import — see app/api/coding.py. The fallback itself now lives in
-    whatever `get_llm_provider()` returns, not here."""
-    async for chunk in get_llm_provider().stream_complete(
-        system=system, user=user, max_tokens=max_tokens
-    ):
-        yield chunk

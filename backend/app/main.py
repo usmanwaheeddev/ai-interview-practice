@@ -5,7 +5,6 @@ from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import text
 
 from app.api.auth import router as auth_router
-from app.api.coding import router as coding_router
 from app.api.gdpr import router as gdpr_router
 from app.api.practice import router as practice_router
 from app.api.provider_tests import router as provider_tests_router
@@ -74,7 +73,6 @@ app.add_exception_handler(Exception, unhandled_error_handler)
 app.include_router(auth_router, prefix="/api")
 app.include_router(practice_router, prefix="/api")
 app.include_router(resumes_router, prefix="/api")
-app.include_router(coding_router, prefix="/api")
 app.include_router(gdpr_router, prefix="/api")
 app.include_router(provider_tests_router, prefix="/api")
 app.include_router(interview_ws_router)

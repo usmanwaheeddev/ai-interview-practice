@@ -1,15 +1,3 @@
-from app.db.models.coding import (
-    CodingDifficulty,
-    CodingHintConfig,
-    CodingHintLog,
-    CodingHintUsage,
-    CodingLanguage,
-    CodingQuestion,
-    CodingReviewLog,
-    CodingSubmission,
-    CodingSubmissionStatus,
-    CodingTestCase,
-)
 from app.db.models.mock_interview import (
     MockInterview,
     MockInterviewLanguage,
@@ -35,14 +23,4 @@ __all__ = [
     "MockInterviewTurn",
     "MockMediaAsset",
     "MockInterviewScore",
-    "CodingQuestion",
-    "CodingTestCase",
-    "CodingSubmission",
-    "CodingDifficulty",
-    "CodingLanguage",
-    "CodingSubmissionStatus",
-    "CodingHintConfig",
-    "CodingHintUsage",
-    "CodingHintLog",
-    "CodingReviewLog",
 ]

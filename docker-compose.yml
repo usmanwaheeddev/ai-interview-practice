@@ -87,37 +87,6 @@ services:
         ollama run ${OLLAMA_MODEL:-llama3.2:1b} "hi" --verbose=false
     restart: "no"
 
-  piston:
-    image: ghcr.io/engineer-man/piston
-    # Piston's execution backend (`isolate`) needs to create directories and
-    # manage cgroups on what would otherwise be a read-only container fs —
-    # confirmed required by a Piston maintainer (github.com/engineer-man/
-    # piston/issues/696), not optional hardening we can drop.
-    privileged: true
-    # Piston's own server-side ceilings default to run_timeout=3000ms/
-    # run_cpu_time=3000ms — lower than what app/core/config.py's
-    # piston_run_timeout_ms (10000) requests, so /execute rejects it with a
-    # 400 unless raised here to match. compile_timeout's 10000ms default
-    # ceiling already matches and needs no override.
-    environment:
-      PISTON_RUN_TIMEOUT: "10000"
-      PISTON_RUN_CPU_TIME: "10000"
-    ports:
-      - "2000:2000"
-    volumes:
-      - piston_packages:/piston/packages
-    tmpfs:
-      - /tmp:exec
-    # Piston's server itself runs on Node, so `node` is guaranteed present in
-    # the image even though we can't assume curl/wget are.
-    healthcheck:
-      test:
-        - "CMD-SHELL"
-        - "node -e \"require('http').get('http://localhost:2000/api/v2/runtimes',r=>process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1))\""
-      interval: 5s
-      timeout: 5s
-      retries: 20
-
   api:
     build:
       context: ./backend
@@ -128,7 +97,6 @@ services:
       REDIS_URL: redis://redis:6379/0
       S3_ENDPOINT_URL: http://minio:9000
       OLLAMA_URL: http://ollama:11434
-      PISTON_BASE_URL: http://piston:2000
     ports:
       - "8005:8000"
     volumes:
@@ -155,7 +123,6 @@ services:
       REDIS_URL: redis://redis:6379/0
       S3_ENDPOINT_URL: http://minio:9000
       OLLAMA_URL: http://ollama:11434
-      PISTON_BASE_URL: http://piston:2000
     volumes:
       - ./backend:/app
       - whisper_models:/root/.cache/huggingface
@@ -191,6 +158,5 @@ volumes:
   postgres_data:
   minio_data:
   ollama_data:
-  piston_packages:
   whisper_models:
   piper_voices:

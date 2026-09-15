@@ -1,7 +1,7 @@
 [project]
-name = "hiring-interview-backend"
+name = "ai-interview-practice-backend"
 version = "0.1.0"
-description = "AI Hiring Platform backend"
+description = "AI Interview Practice backend"
 requires-python = ">=3.12"
 dependencies = [
     "fastapi==0.115.6",

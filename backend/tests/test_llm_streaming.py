@@ -1,7 +1,7 @@
 import pytest
 
 from app.core.config import get_settings
-from app.providers.llm import get_llm_provider, stream_complete_with_fallback
+from app.providers.llm import get_llm_provider
 from app.providers.llm.fake import FakeLLMProvider
 from app.providers.llm.fallback import FallbackLLMProvider
 
@@ -112,7 +112,6 @@ async def test_get_llm_provider_wraps_groq_with_fallback(monkeypatch):
     finally:
         get_llm_provider.cache_clear()
 
-
 async def test_get_llm_provider_wraps_ollama_with_groq_fallback(monkeypatch):
     from app.providers.llm.ollama import OllamaLLMProvider
 
@@ -126,11 +125,3 @@ async def test_get_llm_provider_wraps_ollama_with_groq_fallback(monkeypatch):
         assert provider._fallback_name == "groq"
     finally:
         get_llm_provider.cache_clear()
-
-
-async def test_stream_complete_with_fallback_delegates_to_llm_provider(monkeypatch):
-    import app.providers.llm as llm_module
-
-    monkeypatch.setattr(llm_module, "get_llm_provider", lambda: _Succeeds())
-    chunks = [c async for c in stream_complete_with_fallback(system="s", user="u")]
-    assert "".join(chunks) == "fallback response"
