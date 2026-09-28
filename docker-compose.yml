@@ -24,7 +24,11 @@ services:
       retries: 10
 
   minio:
-    image: minio/minio:latest
+    # MinIO's Docker Hub repository is no longer reliably pullable. The
+    # project's published Compose example uses the Quay registry instead.
+    # Pin the release so a future registry change cannot silently alter the
+    # storage service used by this development stack.
+    image: quay.io/minio/minio:RELEASE.2025-09-06T17-38-46Z
     command: server /data --console-address ":9001"
     environment:
       MINIO_ROOT_USER: minioadmin
