@@ -14,12 +14,12 @@ class Settings(BaseSettings):
 
     s3_endpoint_url: str = "http://localhost:9000"
     # Used only to *construct and sign* presigned URLs — the browser calling
-    # them can't resolve the internal docker-compose hostname `minio`, so
-    # this must be the address the browser can actually reach. Same MinIO,
+    # them can't resolve the internal docker-compose hostname `rustfs`, so
+    # this must be the address the browser can actually reach. Same RustFS,
     # different address for two different callers (backend vs. browser).
     s3_public_endpoint_url: str = "http://localhost:9000"
-    s3_access_key: str = "minioadmin"
-    s3_secret_key: str = "minioadmin"
+    s3_access_key: str = "rustfsadmin"
+    s3_secret_key: str = "rustfsadmin"
     s3_bucket: str = "ai-interview-practice"
     s3_region: str = "us-east-1"
 
@@ -29,6 +29,9 @@ class Settings(BaseSettings):
     refresh_token_ttl_days: int = 7
 
     cors_origins: list[str] = ["http://localhost:5173"]
+    # Enable only when the API is reachable exclusively through a trusted
+    # reverse proxy, as in compose.production.yml.
+    trust_proxy_headers: bool = False
 
     # Provider selection — see architecture.md §7
     llm_provider: str = "fake"

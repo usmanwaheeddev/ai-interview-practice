@@ -23,26 +23,28 @@ services:
       timeout: 5s
       retries: 10
 
-  minio:
-    # MinIO's Docker Hub repository is no longer reliably pullable. The
-    # project's published Compose example uses the Quay registry instead.
-    # Pin the release so a future registry change cannot silently alter the
-    # storage service used by this development stack.
-    image: quay.io/minio/minio:RELEASE.2025-09-06T17-38-46Z
-    command: server /data --console-address ":9001"
+  rustfs:
+    # RustFS provides the S3-compatible API used for resumes and recordings
+    # and publishes multi-architecture images for local development.
+    image: rustfs/rustfs:1.0.0
     environment:
-      MINIO_ROOT_USER: minioadmin
-      MINIO_ROOT_PASSWORD: minioadmin
+      RUSTFS_VOLUMES: /data
+      RUSTFS_ADDRESS: 0.0.0.0:9000
+      RUSTFS_CONSOLE_ADDRESS: 0.0.0.0:9001
+      RUSTFS_CONSOLE_ENABLE: "true"
+      RUSTFS_ACCESS_KEY: rustfsadmin
+      RUSTFS_SECRET_KEY: rustfsadmin
     ports:
       - "9000:9000"
       - "9001:9001"
     volumes:
-      - minio_data:/data
+      - rustfs_data:/data
     healthcheck:
-      test: ["CMD", "mc", "ready", "local"]
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:9000/health"]
       interval: 5s
       timeout: 5s
       retries: 10
+      start_period: 10s
 
   ollama:
     image: ollama/ollama:latest
@@ -99,7 +101,7 @@ services:
     environment:
       DATABASE_URL: postgresql+asyncpg://hiring:hiring@postgres:5432/hiring
       REDIS_URL: redis://redis:6379/0
-      S3_ENDPOINT_URL: http://minio:9000
+      S3_ENDPOINT_URL: http://rustfs:9000
       OLLAMA_URL: http://ollama:11434
     ports:
       - "8005:8000"
@@ -112,9 +114,15 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
-      minio:
+      rustfs:
         condition: service_healthy
     command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
 
   worker:
     build:
@@ -125,7 +133,7 @@ services:
     environment:
       DATABASE_URL: postgresql+asyncpg://hiring:hiring@postgres:5432/hiring
       REDIS_URL: redis://redis:6379/0
-      S3_ENDPOINT_URL: http://minio:9000
+      S3_ENDPOINT_URL: http://rustfs:9000
       OLLAMA_URL: http://ollama:11434
     volumes:
       - ./backend:/app
@@ -160,7 +168,7 @@ services:
 
 volumes:
   postgres_data:
-  minio_data:
+  rustfs_data:
   ollama_data:
   whisper_models:
   piper_voices:

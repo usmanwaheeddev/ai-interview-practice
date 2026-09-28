@@ -72,7 +72,7 @@ export class InterviewSocket {
   private _connect(): void {
     const wsBase =
       import.meta.env.VITE_WS_URL ??
-      `${window.location.protocol === "https:" ? "wss" : "ws"}://${window.location.hostname}:8005`;
+      `${window.location.protocol === "https:" ? "wss" : "ws"}://${window.location.host}`;
     const ws = new WebSocket(`${wsBase}/ws/mock-interviews/${this.sessionId}`);
     ws.binaryType = "arraybuffer";
     this.ws = ws;

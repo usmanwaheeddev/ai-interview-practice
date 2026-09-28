@@ -1,4 +1,4 @@
-.PHONY: up down migrate migration seed test test-backend test-frontend lint lint-backend lint-frontend interview-cli interview-sim ollama-pull logs backup restore-rehearsal
+.PHONY: up down migrate migration seed test test-backend test-frontend lint lint-backend lint-frontend verify interview-cli interview-sim ollama-pull logs backup restore-rehearsal
 
 up:
 	@test -f .env || cp .env.example .env
@@ -6,7 +6,7 @@ up:
 	@echo "API:      http://localhost:8005"
 	@echo "API docs: http://localhost:8005/docs"
 	@echo "Web: optional; docker compose --profile frontend up -d --build"
-	@echo "MinIO:    http://localhost:9001 (minioadmin/minioadmin)"
+	@echo "RustFS:   http://localhost:9001 (rustfsadmin/rustfsadmin)"
 
 down:
 	docker compose down
@@ -40,6 +40,11 @@ lint-backend:
 lint-frontend:
 	docker compose exec web npm run lint
 	docker compose exec web npm run typecheck
+
+# One command for the complete pre-push quality gate.
+verify: test-backend lint-backend test-frontend lint-frontend
+	docker compose exec web npm run build
+	docker compose config --quiet
 
 interview-cli:
 	docker compose exec api python -m app.cli.latency_spike --turns $(or $(turns),10)

@@ -9,7 +9,7 @@ from app.core.config import Settings
 
 
 class S3StorageProvider:
-    """Works against real S3 and against MinIO (dev) — same API, different
+    """Works against real S3 and against RustFS (dev) — same API, different
     endpoint_url. See architecture.md §7."""
 
     def __init__(self, settings: Settings) -> None:

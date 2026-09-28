@@ -39,7 +39,7 @@ flowchart LR
     subgraph Data
         PG[(PostgreSQL)]
         Redis[(Redis\nqueue + session state + locks + rate limits)]
-        S3[(MinIO / S3\nresumes + recordings)]
+        S3[(RustFS / S3\nresumes + recordings)]
     end
 
     subgraph AI providers
@@ -81,11 +81,11 @@ All components run as Docker Compose services (`docker-compose.yml`):
 | `web` | React/Vite dev server | Port `5173`; opt-in with `docker compose --profile frontend up -d --build` |
 | `postgres` | Primary datastore | Postgres 16 |
 | `redis` | Job queue, interview session-state store, connection locks, rate-limit counters | Redis 7 |
-| `minio` | S3-compatible object storage | Resumes and interview recordings; ports `9000` (API) / `9001` (console) |
+| `rustfs` | RustFS S3-compatible object storage | Resumes and interview recordings; ports `9000` (API) / `9001` (console) |
 | `ollama` | Self-hosted LLM, default primary or fallback | `OLLAMA_KEEP_ALIVE=-1` keeps the model resident in memory once loaded — see [LLM provider fallback](#llm-provider-fallback) |
 | `ollama-pull` | One-shot init job | Pulls `OLLAMA_MODEL` and runs a throwaway prompt to warm it before real traffic arrives |
 
-`api` and `worker` both depend on Postgres, Redis, and (for `api`) MinIO being healthy before starting. Whisper models and Piper voices are cached in named volumes (`whisper_models`, `piper_voices`) shared between `api` and `worker` so they aren't re-downloaded on every restart.
+`api` and `worker` both depend on Postgres, Redis, and (for `api`) RustFS being healthy before starting. Whisper models and Piper voices are cached in named volumes (`whisper_models`, `piper_voices`) shared between `api` and `worker` so they aren't re-downloaded on every restart.
 
 ## Backend structure
 
@@ -124,7 +124,7 @@ Every external capability is behind a small `Protocol` interface, selected at st
 | LLM | `LLMProvider` (`extract_json`, `complete`, `stream_complete`, `health`) | `fake`, `ollama` (self-hosted), `groq` (cloud, wrapped in `FallbackLLMProvider` with Ollama as fallback) | `LLM_PROVIDER` |
 | Speech-to-text | — | `fake`, `faster_whisper` | `STT_PROVIDER` |
 | Text-to-speech | — | `fake`, `piper` (espeak-ng fallback for Urdu, which has no Piper voice) | `TTS_PROVIDER` |
-| Object storage | — | `fake`, `s3` (MinIO or real S3) | `STORAGE_PROVIDER` |
+| Object storage | — | `fake`, `s3` (RustFS or real S3) | `STORAGE_PROVIDER` |
 
 Every provider adapter that makes a network call wraps it in the shared `call_with_resilience()` helper (timeout + jittered retry) and a per-instance `CircuitBreaker` — see [Resilience patterns](#resilience-patterns).
 
@@ -311,7 +311,7 @@ Login and registration are rate-limited per IP via Redis (register: 5/hour, logi
 
 ## Storage
 
-`S3StorageProvider` talks to MinIO in development and any real S3-compatible service in production, using two separate clients: one against the internal endpoint (backend-to-storage I/O) and one purely for signing presigned URLs against a browser-reachable endpoint — the browser cannot resolve the internal Docker hostname the backend uses.
+`S3StorageProvider` talks to RustFS in development and any real S3-compatible service in production, using two separate clients: one against the internal endpoint (backend-to-storage I/O) and one purely for signing presigned URLs against a browser-reachable endpoint — the browser cannot resolve the internal Docker hostname the backend uses.
 
 Stored objects:
 - **Resumes** — `resumes/{user_id}/{uuid}.{pdf|docx}`

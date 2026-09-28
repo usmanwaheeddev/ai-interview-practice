@@ -7,7 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.schemas.resumes import ResumeResponse
 from app.core.deps import get_current_user
-from app.core.exceptions import NotFoundError, ValidationAppError
+from app.core.exceptions import NotFoundError, ServiceUnavailableError, ValidationAppError
 from app.core.queue import get_queue
 from app.db.models import Resume, User
 from app.db.session import get_db
@@ -55,7 +55,18 @@ async def upload_resume(
     await db.commit()
     await db.refresh(resume)
 
-    await queue.enqueue_job("parse_resume", str(resume.id))
+    try:
+        await queue.enqueue_job("parse_resume", str(resume.id))
+    except Exception:
+        # The upload and database row must not survive as an indefinitely
+        # pending resume when the background queue is unavailable.
+        await db.delete(resume)
+        await db.commit()
+        await storage.delete_object(storage_key)
+        raise ServiceUnavailableError(
+            "Resume processing is temporarily unavailable. Please try again.",
+            code="queue_unavailable",
+        ) from None
 
     return resume
 

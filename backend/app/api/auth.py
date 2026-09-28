@@ -67,10 +67,10 @@ async def _email_taken(db: AsyncSession, email: str) -> bool:
 
 
 def _client_ip(request: Request) -> str:
-    # No reverse-proxy X-Forwarded-For handling — this dev stack has no
-    # proxy in front of the API yet. Revisit before Phase 6's "real
-    # candidate" bar if one is added, or every request will rate-limit
-    # against the proxy's own IP instead of the caller's.
+    if settings.trust_proxy_headers:
+        forwarded = request.headers.get("x-forwarded-for")
+        if forwarded:
+            return forwarded.split(",", maxsplit=1)[0].strip()
     return request.client.host if request.client else "unknown"
 
 

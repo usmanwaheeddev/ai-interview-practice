@@ -43,6 +43,23 @@ async def test_valid_docx_upload_accepted(client: AsyncClient) -> None:
     assert res.status_code == 201, res.text
 
 
+async def test_queue_failure_rolls_back_resume(client: AsyncClient, fake_queue) -> None:
+    await _register_candidate(client, "queue-failure@example.com")
+
+    async def fail_enqueue(*args, **kwargs):
+        raise RuntimeError("queue unavailable")
+
+    fake_queue.enqueue_job = fail_enqueue
+    res = await client.post(
+        "/api/resumes",
+        files={"file": ("resume.pdf", PDF_BYTES, "application/pdf")},
+    )
+
+    assert res.status_code == 503
+    assert res.json()["code"] == "queue_unavailable"
+    assert (await client.get("/api/resumes")).json() == []
+
+
 async def test_oversized_file_rejected(client: AsyncClient) -> None:
     await _register_candidate(client)
 

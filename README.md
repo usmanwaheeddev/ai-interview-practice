@@ -1,6 +1,8 @@
 # AI Interview Practice
 
-A full-stack, self-hosted, AI-powered mock interview practice platform.
+A production-oriented, self-hosted AI mock-interview platform with real-time
+voice conversations, resilient AI-provider integrations, evidence-grounded
+feedback, and privacy controls.
 Users can upload resumes, practice interviews against a job description or a
 spoken-language track, and receive transcript-based feedback. This is a personal
 practice tool, not an automated hiring-decision system.
@@ -22,7 +24,7 @@ components, data flows, domain models, and provider behavior.
 ## Stack
 
 Python 3.12, FastAPI, SQLAlchemy, Alembic, PostgreSQL 16, Redis 7, ARQ,
-MinIO/S3, Ollama with optional Groq fallback, faster-whisper or whisper.cpp,
+RustFS/S3, Ollama with optional Groq fallback, faster-whisper or whisper.cpp,
 and Piper/espeak-ng. The frontend uses React 18, TypeScript, Vite,
 Tailwind CSS, React Query, and React Router.
 
@@ -41,7 +43,7 @@ make migrate
 docker compose --profile frontend up -d --build
 ```
 
-`make up` starts the API, worker, PostgreSQL, Redis, MinIO, Ollama (including a
+`make up` starts the API, worker, PostgreSQL, Redis, RustFS, Ollama (including a
 model pull/warm-up job). The final command starts the included web
 application using the opt-in `frontend` Compose profile.
 
@@ -51,7 +53,7 @@ application using the opt-in `frontend` Compose profile.
 - ReDoc: http://localhost:8005/redoc
 - Liveness: http://localhost:8005/health
 - Readiness: http://localhost:8005/ready
-- MinIO console: http://localhost:9001
+- Object-storage console: http://localhost:9001
 
 Readiness checks access infrastructure and configured providers, and may download
 or load models on the first call. Optional `make seed` creates local practice data.
@@ -74,6 +76,20 @@ CLI and model. Docker Desktop's Linux VM cannot access Apple Metal.
 
 Speech models and voice assets are local runtime downloads, not repository files.
 
+## Engineering highlights
+
+- Deterministic interview state machine with Redis-backed reconnect recovery.
+- Streaming voice transport with VAD, overlapping STT segments, partial
+  transcripts, and server-authoritative timing.
+- Provider isolation with timeouts, retries, circuit breakers, and LLM fallback.
+- Evidence validation prevents feedback from citing transcript text that was
+  never spoken.
+- Resource ownership is enforced at every API boundary; personal-data export
+  and complete erasure are first-class endpoints.
+- Background jobs are retryable and preserve user data when providers fail.
+- Separate development and production container builds, automated migrations,
+  health checks, non-root runtime, and same-origin WebSocket proxying.
+
 ## Development
 
 ```bash
@@ -81,6 +97,7 @@ make test          # Backend pytest suite; contract tests excluded by default.
 make lint          # Backend Ruff and mypy checks.
 make test-frontend # Frontend Vitest suite; start the frontend profile first.
 make lint-frontend # Frontend ESLint and TypeScript checks.
+make verify        # Complete pre-push quality gate.
 make logs
 make migration m="describe schema change"
 make migrate
@@ -119,6 +136,29 @@ The Compose API and worker bind-mount the backend for development. Restart the
 worker after changing worker code. The Dockerfile includes development tools;
 this Compose configuration is not a hardened production deployment.
 
+## Production container deployment
+
+The production reference stack uses multi-stage images, an unprivileged API
+runtime, an Nginx-served frontend, same-origin REST/WebSocket proxying,
+health-gated startup, automatic Alembic migrations, persistent Redis state, and
+restart policies.
+
+```bash
+cp .env.production.example .env.production
+# Replace every CHANGE_ME value and configure public HTTPS origins.
+docker compose --env-file .env.production -f compose.production.yml config --quiet
+docker compose --env-file .env.production -f compose.production.yml up -d --build
+docker compose --env-file .env.production -f compose.production.yml ps
+```
+
+Terminate TLS in front of port 80 and expose the S3 API through the hostname in
+`S3_PUBLIC_ENDPOINT_URL`. The object-storage administration console binds only
+to `127.0.0.1:9001` in the production stack. For a small CPU-only VM, use Groq
+for LLM calls and keep Whisper `base` as shown in the example configuration.
+
+Do not deploy with example credentials. Keep `.env.production` outside version
+control and back up the PostgreSQL and object-storage volumes.
+
 ## Structure
 
 ```text
@@ -150,7 +190,7 @@ Authenticated users can export their data at `GET /api/me/data-export` and erase
 their account at `POST /api/me/erase`. Data persists until deleted; there is no
 automatic retention schedule.
 
-The example PostgreSQL, MinIO, and JWT credentials are development defaults.
+The example PostgreSQL, object-storage, and JWT credentials are development defaults.
 Replace them, configure HTTPS and secure cookies, restrict exposed infrastructure
 ports, and review access controls before deploying.
 
