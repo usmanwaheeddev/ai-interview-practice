@@ -157,13 +157,13 @@ services:
       - ./frontend:/app
       - /app/node_modules
     environment:
-      VITE_API_URL: http://localhost:8005/api
+      VITE_API_URL: http://0.0.0.0:8005/api
       # The REST API and the interview WebSocket are the same FastAPI process
       # (see app/main.py — interview_ws_router is mounted on the main `app`),
       # exposed together on host port 8005 via the api service's "8005:8000"
       # mapping. Without this, wsClient.ts falls back to port 8000, which on
       # this host belongs to an unrelated service, not this API.
-      VITE_WS_URL: ws://localhost:8005
+      VITE_WS_URL: ws://0.0.0.0:8005
     command: npm run dev -- --host 0.0.0.0
 
 volumes:
