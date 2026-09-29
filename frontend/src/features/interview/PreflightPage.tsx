@@ -22,13 +22,13 @@ export function PreflightPage() {
 
   useEffect(() => {
     // Self-hosted STT/TTS load their models lazily on first use (see
-    // app/main.py's /ready docstring and providers/stt/faster_whisper.py) —
-    // several seconds on CPU. Nothing else ever called /ready, so that cold
+    // app/main.py's /api/ready docstring and providers/stt/faster_whisper.py) —
+    // several seconds on CPU. Nothing else ever called /api/ready, so that cold
     // load used to happen during the candidate's actual first turn instead
     // of here, while they're still reading instructions and granting mic
     // access. Fire-and-forget: this is a warmup, not a precondition for
     // continuing, so a failure here shouldn't block the flow.
-    void fetch(new URL("/ready", API_URL).toString()).catch(() => {});
+    void fetch(`${API_URL}/ready`).catch(() => {});
   }, []);
 
   useEffect(() => {

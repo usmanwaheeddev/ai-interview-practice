@@ -113,7 +113,7 @@ All routers are mounted under `/api`, except the WebSocket handler, which is mou
 | `provider_tests.py` | `/api/provider-tests` | `POST /groq` (development-only, verifies live Groq connectivity) |
 | `ws/interview.py` | `/ws/mock-interviews/{id}` | WebSocket: the live interview session |
 
-The app also exposes `GET /health` (liveness) and `GET /ready` (readiness — pings Postgres, Redis, and every configured provider's `.health()`).
+The app also exposes `GET /api/health` (liveness) and `GET /api/ready` (readiness — pings Postgres, Redis, and every configured provider's `.health()`).
 
 ### Providers
 

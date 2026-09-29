@@ -78,13 +78,13 @@ app.include_router(provider_tests_router, prefix="/api")
 app.include_router(interview_ws_router)
 
 
-@app.get("/health")
+@app.get("/api/health")
 async def health() -> dict[str, str]:
     """Liveness — process is up. Does not touch dependencies."""
     return {"status": "ok"}
 
 
-@app.get("/ready")
+@app.get("/api/ready")
 async def ready() -> dict[str, str]:
     """Readiness — every dependency this process needs is reachable, AI
     providers included. See architecture.md §11.

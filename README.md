@@ -51,8 +51,8 @@ application using the opt-in `frontend` Compose profile.
 - API: http://localhost:8005
 - Swagger: http://localhost:8005/docs
 - ReDoc: http://localhost:8005/redoc
-- Liveness: http://localhost:8005/health
-- Readiness: http://localhost:8005/ready
+- Liveness: http://localhost:8005/api/health
+- Readiness: http://localhost:8005/api/ready
 - Object-storage console: http://localhost:9001
 
 Readiness checks access infrastructure and configured providers, and may download
