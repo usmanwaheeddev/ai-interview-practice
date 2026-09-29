@@ -1,18 +1,22 @@
-.PHONY: up down migrate migration seed test test-backend test-frontend lint lint-backend lint-frontend verify interview-cli interview-sim ollama-pull logs backup restore-rehearsal
+.PHONY: up up-backend down migrate migration seed test test-backend test-frontend lint lint-backend lint-frontend verify interview-cli interview-sim ollama-pull logs backup restore-rehearsal
 
 up:
 	@test -f .env || cp .env.example .env
-	docker compose up -d --build
+	docker compose --profile frontend up -d --build
 	@echo "API:      http://localhost:8005"
 	@echo "API docs: http://localhost:8005/docs"
-	@echo "Web: optional; docker compose --profile frontend up -d --build"
+	@echo "Web:      http://localhost:5173"
 	@echo "RustFS:   http://localhost:9001 (rustfsadmin/rustfsadmin)"
 
+up-backend:
+	@test -f .env || cp .env.example .env
+	docker compose up -d --build
+
 down:
-	docker compose down
+	docker compose --profile frontend down
 
 logs:
-	docker compose logs -f
+	docker compose --profile frontend logs -f
 
 migrate:
 	docker compose exec api alembic upgrade head
@@ -29,7 +33,7 @@ test-backend:
 	docker compose exec api pytest
 
 test-frontend:
-	docker compose exec web npm run test
+	docker compose --profile frontend exec web npm run test
 
 lint: lint-backend
 
@@ -38,13 +42,13 @@ lint-backend:
 	docker compose exec api mypy app
 
 lint-frontend:
-	docker compose exec web npm run lint
-	docker compose exec web npm run typecheck
+	docker compose --profile frontend exec web npm run lint
+	docker compose --profile frontend exec web npm run typecheck
 
 # One command for the complete pre-push quality gate.
 verify: test-backend lint-backend test-frontend lint-frontend
-	docker compose exec web npm run build
-	docker compose config --quiet
+	docker compose --profile frontend exec web npm run build
+	docker compose --profile frontend config --quiet
 
 interview-cli:
 	docker compose exec api python -m app.cli.latency_spike --turns $(or $(turns),10)
