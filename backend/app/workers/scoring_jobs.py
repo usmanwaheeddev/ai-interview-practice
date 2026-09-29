@@ -66,10 +66,6 @@ async def score_mock_interview(ctx: dict, interview_id: str) -> None:
         except Exception as exc:
             logger.exception("mock_score.failed", interview_id=interview_id)
             score.status = "failed"
-            score.failure_reason = (
-                str(exc)
-                if isinstance(exc, ValueError)
-                else "Scoring service unavailable. Retry your report shortly."
-            )
+            score.failure_reason = str(exc)
             interview.state = MockInterviewState.COMPLETED
         await db.commit()
