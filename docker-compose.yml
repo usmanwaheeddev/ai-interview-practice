@@ -89,8 +89,8 @@ services:
     # host and trips FallbackLLMProvider's 20s timeout.
     command:
       - >
-        ollama pull ${OLLAMA_MODEL:-llama3.2:1b} &&
-        ollama run ${OLLAMA_MODEL:-llama3.2:1b} "hi" --verbose=false
+        ollama pull ${OLLAMA_MODEL:-llama3.2:3b} &&
+        ollama run ${OLLAMA_MODEL:-llama3.2:3b} "hi" --verbose=false
     restart: "no"
 
   api:
