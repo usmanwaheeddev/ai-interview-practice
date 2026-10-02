@@ -1,6 +1,7 @@
 import asyncio
 import io
 import json
+import sys
 import threading
 import wave
 from pathlib import Path
@@ -18,15 +19,16 @@ _ESPEAK_LANGUAGE = "ur"  # the one spoken language with no Piper voice at all
 
 class PiperTTSProvider:
     """Local, self-hosted, no API key — see memory.md ADR-014. CPU synthesis
-    via Piper. Voice models download lazily on first use into a shared volume
-    (see docker-compose.yml `piper_voices`), so subsequent container starts
-    don't re-download them. One voice is loaded per spoken language that has
-    a Piper voice; Urdu has none, so it's synthesized with the espeak-ng
-    binary instead (see `_synthesize_espeak`) — robotic, but functional."""
+    via Piper. Voice models download lazily on first use into the configured
+    directory (an OS-specific user cache locally, or the `piper_voices` Docker
+    volume), so subsequent starts don't re-download them. One voice is loaded
+    per spoken language that has a Piper voice; Urdu has none, so it's
+    synthesized with the espeak-ng binary instead (see `_synthesize_espeak`)
+    — robotic, but functional."""
 
     def __init__(self, settings: Settings) -> None:
         self._voice_names = {"en": settings.piper_voice, "hi": settings.piper_voice_hi}
-        self._voices_dir = Path(settings.piper_voices_dir)
+        self._voices_dir = Path(settings.piper_voices_dir).expanduser().resolve()
         # piper-tts ships no type stubs — PiperVoice resolves to Any.
         self._voices: dict[str, Any] = {}
         self._load_lock = asyncio.Lock()
@@ -46,7 +48,7 @@ class PiperTTSProvider:
                 logger.info("piper.downloading_voice", voice=voice_name)
                 self._voices_dir.mkdir(parents=True, exist_ok=True)
                 proc = await asyncio.create_subprocess_exec(
-                    "python3",
+                    sys.executable,
                     "-m",
                     "piper.download_voices",
                     voice_name,

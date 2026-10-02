@@ -7,8 +7,7 @@ export interface SessionStateMsg {
 export interface TranscriptMsg {
   turn_id: number | string;
   text: string;
-  /** The spoken language auto-detected from this candidate utterance
-   * (en/hi/ur) — the conversation follows whatever the candidate speaks. */
+  /** Language attached by the server; current live interviews use English. */
   language?: string;
 }
 export interface CandidateProcessingMsg {
@@ -18,7 +17,7 @@ export interface AgentSpeakingMsg {
   turn_id: number | string;
   text?: string;
   question_source?: string | null;
-  /** The spoken language this utterance is voiced in. */
+  /** The spoken language this utterance is voiced in (currently English). */
   language?: string;
 }
 export interface TimerTickMsg {

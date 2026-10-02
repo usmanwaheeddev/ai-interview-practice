@@ -12,7 +12,6 @@ main suite runs against `fake` adapters exclusively (plan.md §3.7).
 import pytest
 
 from app.core.config import get_settings
-from app.providers.llm.groq import GroqLLMProvider
 from app.providers.llm.ollama import OllamaLLMProvider
 from app.providers.stt.faster_whisper import FasterWhisperSTTProvider
 from app.providers.tts.piper import PiperTTSProvider
@@ -27,20 +26,6 @@ async def test_ollama_health() -> None:
 
 async def test_ollama_completes_a_prompt() -> None:
     provider = OllamaLLMProvider(get_settings())
-    response = await provider.complete(
-        system="Reply with exactly one word.", user="Say the word 'hello'."
-    )
-    assert isinstance(response, str)
-    assert len(response.strip()) > 0
-
-
-async def test_groq_health() -> None:
-    provider = GroqLLMProvider(get_settings())
-    assert await provider.health() is True
-
-
-async def test_groq_completes_a_prompt() -> None:
-    provider = GroqLLMProvider(get_settings())
     response = await provider.complete(
         system="Reply with exactly one word.", user="Say the word 'hello'."
     )

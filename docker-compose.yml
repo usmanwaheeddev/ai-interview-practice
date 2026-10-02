@@ -53,8 +53,8 @@ services:
     environment:
       # Ollama unloads an idle model after its default 5m keep_alive, and
       # reloading it from disk on this CPU-only host takes ~90s — far past
-      # the 20s timeout FallbackLLMProvider gives it, so any request after
-      # an idle gap fails outright. Keeping it resident indefinitely once
+      # application request timeouts, so any request after an idle gap can
+      # fail. Keeping it resident indefinitely once
       # loaded avoids that cold-load path entirely.
       OLLAMA_KEEP_ALIVE: "-1"
     volumes:
@@ -67,13 +67,13 @@ services:
 
   # One-shot: pulls the model app/core/config.py's OLLAMA_MODEL (see .env)
   # expects into the `ollama` service's volume, so it's actually there the
-  # first time something needs it — either as the LLM_PROVIDER=ollama
-  # primary, or as FallbackLLMProvider's fallback when Groq is rate-limited
-  # (see app/providers/llm/fallback.py). Talks to the sibling `ollama`
+  # first time something needs it — either as the local fallback in the
+  # DeepSeek fallback or LLM_PROVIDER=ollama primary (see
+  # app/providers/llm/fallback.py). Talks to the sibling `ollama`
   # service over HTTP rather than running its own server. Runs once per
   # `docker compose up`; a model already present is a fast no-op, so this
-  # isn't worth gating api/worker startup on — they already degrade
-  # gracefully (a canned fallback question) if it hasn't finished yet.
+  # isn't worth gating api/worker startup on; DeepSeek remains the primary
+  # while the local fallback is being prepared.
   ollama-pull:
     image: ollama/ollama:latest
     environment:
@@ -84,13 +84,11 @@ services:
     entrypoint: ["sh", "-c"]
     # Pull, then immediately run a throwaway prompt so the model is loaded
     # into memory (and, with OLLAMA_KEEP_ALIVE=-1 on the `ollama` service,
-    # stays there) before any real request arrives — otherwise the first
-    # interview of the day eats the ~90s cold-load cost on this CPU-only
-    # host and trips FallbackLLMProvider's 20s timeout.
+    # stays there) before any real request arrives.
     command:
       - >
         ollama pull ${OLLAMA_MODEL:-llama3.2:3b} &&
-        ollama run ${OLLAMA_MODEL:-llama3.2:3b} "hi" --verbose=false
+        ollama run ${OLLAMA_MODEL:-llama3.2:3b} 'Return exactly this JSON: {"action":"advance","text":""}' --verbose=false
     restart: "no"
 
   api:
@@ -102,7 +100,10 @@ services:
       DATABASE_URL: postgresql+asyncpg://hiring:hiring@postgres:5432/hiring
       REDIS_URL: redis://redis:6379/0
       S3_ENDPOINT_URL: http://rustfs:9000
-      OLLAMA_URL: http://ollama:11434
+      # Override with OLLAMA_DOCKER_URL=http://host.docker.internal:11434
+      # when using a native macOS Ollama process for Metal acceleration.
+      OLLAMA_URL: ${OLLAMA_DOCKER_URL:-http://ollama:11434}
+      PIPER_VOICES_DIR: /opt/piper-voices
     ports:
       - "8005:8000"
     volumes:
@@ -134,7 +135,10 @@ services:
       DATABASE_URL: postgresql+asyncpg://hiring:hiring@postgres:5432/hiring
       REDIS_URL: redis://redis:6379/0
       S3_ENDPOINT_URL: http://rustfs:9000
-      OLLAMA_URL: http://ollama:11434
+      # Keep API and worker on the same fallback endpoint. This also lets a
+      # native macOS Ollama process serve background planning/scoring jobs.
+      OLLAMA_URL: ${OLLAMA_DOCKER_URL:-http://ollama:11434}
+      PIPER_VOICES_DIR: /opt/piper-voices
     volumes:
       - ./backend:/app
       - whisper_models:/root/.cache/huggingface
@@ -156,6 +160,8 @@ services:
     volumes:
       - ./frontend:/app
       - /app/node_modules
+    environment:
+      VITE_PROXY_TARGET: http://api:8000
     command: npm run dev -- --host 0.0.0.0
 
 volumes:

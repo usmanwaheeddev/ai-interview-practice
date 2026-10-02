@@ -14,7 +14,7 @@ from app.services.interview.director import Director, DirectorAction, TopicProgr
 from app.services.interview.plan import InterviewPlan, TopicProbe
 
 GREETING = (
-    "Hi, thanks for joining. This will be a mock interview conversation about "
+    "Hi <name>, thanks for joining. This will be a mock interview conversation about "
     "your experience — I'll ask a few questions and follow up where it's "
     "useful. Let's get started."
 )
@@ -52,6 +52,8 @@ class EngineState:
     survivable too"."""
 
     topic_index: int = 0
+    question_index: int = 0
+    extension_questions_asked: int = 0
     progress: TopicProgress = field(default_factory=TopicProgress)
     elapsed_s: int = 0
     turn_index: int = 0
@@ -72,14 +74,18 @@ class InterviewEngine:
         director: Director,
         state: EngineState | None = None,
         spoken_language: str = "en",
+        candidate_name: str = "there",
     ) -> None:
         self.plan = plan
         self.director = director
         self.state = state or EngineState()
         self.spoken_language = spoken_language
+        self.candidate_name = candidate_name.strip() or "there"
 
     def _greeting(self) -> str:
-        return locale.GREETING.get(self.spoken_language, GREETING)
+        return locale.GREETING.get(self.spoken_language, GREETING).replace(
+            "<name>", self.candidate_name
+        )
 
     def _self_intro_prompt(self) -> str:
         return locale.SELF_INTRO_PROMPT.get(self.spoken_language, SELF_INTRO_PROMPT)
@@ -91,6 +97,17 @@ class InterviewEngine:
         return locale.CANDIDATE_QUESTIONS_PROMPT.get(
             self.spoken_language, CANDIDATE_QUESTIONS_PROMPT
         )
+
+    def _continuation_question(self, probe: TopicProbe) -> str:
+        hints = probe.follow_up_hints or ["the decisions you made"]
+        hint = hints[self.state.extension_questions_asked % len(hints)]
+        variants = (
+            "Tell me about a different situation where this skill mattered, focusing on {hint}.",
+            "Walk me through another challenging example and explain {hint}.",
+            "Describe another approach you considered and how it affected {hint}.",
+        )
+        detail = variants[self.state.extension_questions_asked % len(variants)].format(hint=hint)
+        return f"Let's explore {probe.label.lower()} a little further. {detail}"
 
     @property
     def is_complete(self) -> bool:
@@ -127,9 +144,8 @@ class InterviewEngine:
         self.state.elapsed_s = elapsed_s
         self.state.turn_index += 1
 
-        hard_close_start_s = int(self.plan.duration_s * 0.9)
-        candidate_questions_start_s = int(self.plan.duration_s * 0.8)
-        if elapsed_s >= self.plan.duration_s or elapsed_s >= hard_close_start_s:
+        candidate_questions_start_s = int(self.plan.duration_s * 0.9)
+        if elapsed_s >= self.plan.duration_s:
             self.state.complete = True
             return AgentUtterance(kind=TurnKind.CLOSING, text=self._closing())
 
@@ -157,6 +173,7 @@ class InterviewEngine:
             return self._enter_candidate_questions()
 
         self.state.progress.block_elapsed_s = elapsed_s - self.state.current_block_started_at_s
+        topic_time_exhausted = self.state.progress.block_elapsed_s >= probe.time_budget_s
         decision = await self.director.decide(
             probe=probe,
             progress=self.state.progress,
@@ -189,15 +206,40 @@ class InterviewEngine:
                 question_source=decision.question_source,
             )
 
-        # ADVANCE
+        # ADVANCE. Move through the pre-generated question bank before
+        # leaving this topic, unless its overall time allocation has expired.
+        if not topic_time_exhausted and self.state.question_index < len(
+            probe.additional_questions
+        ):
+            self.state.question_index += 1
+            self.state.progress = TopicProgress()
+            return AgentUtterance(
+                kind=TurnKind.PRIMARY_QUESTION,
+                text=probe.additional_questions[self.state.question_index - 1],
+                topic_id=probe.id,
+                question_source=probe.question_source,
+            )
+
         self.state.topic_index += 1
+        self.state.question_index = 0
         self.state.progress = TopicProgress()
         self.state.current_block_started_at_s = elapsed_s
         next_probe = self.current_probe
         if next_probe is None:
-            if elapsed_s >= candidate_questions_start_s:
-                self.state.complete = True
-                return AgentUtterance(kind=TurnKind.CLOSING, text=self._closing())
+            if elapsed_s < candidate_questions_start_s:
+                # Extremely concise answers can exhaust even the generated
+                # bank early. Keep the focused practice useful until the
+                # closing window instead of ending a 15/30-minute booking in
+                # a few minutes.
+                self.state.topic_index -= 1
+                self.state.question_index = len(probe.additional_questions)
+                question = self._continuation_question(probe)
+                self.state.extension_questions_asked += 1
+                return AgentUtterance(
+                    kind=TurnKind.PRIMARY_QUESTION,
+                    text=question,
+                    topic_id=probe.id,
+                )
             return self._enter_candidate_questions()
 
         return AgentUtterance(

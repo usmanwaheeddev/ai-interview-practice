@@ -46,7 +46,7 @@ async def test_provider_follow_up_then_advance() -> None:
     ).decide(probe=probe, progress=progress, candidate_answer="I fixed it.")
     assert first.action == DirectorAction.FOLLOW_UP
     assert first.text
-    assert first.question_source == "groq"
+    assert first.question_source == "deepseek"
 
     progress.follow_ups_used += 1
     second = await Director(ScriptedLLMProvider({"action": "advance"})).decide(
@@ -101,7 +101,7 @@ async def test_llm_follow_up_judgment_respected() -> None:
     )
     assert decision.action == DirectorAction.FOLLOW_UP
     assert decision.text == "What specifically broke?"
-    assert decision.question_source == "groq"
+    assert decision.question_source == "deepseek"
 
 
 async def test_llm_clarify_judgment_respected() -> None:

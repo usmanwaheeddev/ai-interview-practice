@@ -5,8 +5,13 @@ from typing import Any
 import httpx
 
 from app.core.config import Settings
+from app.providers.llm.fast_decision import (
+    FAST_DECISION_MAX_TOKENS,
+    FAST_DECISION_SCHEMA,
+    FAST_DECISION_TIMEOUT_S,
+)
 from app.providers.resilience import CircuitBreaker, call_with_resilience
-from app.services.json_parsing import parse_json_loosely
+from app.services.json_parsing import parse_json_loosely, validate_json_result
 
 
 class OllamaLLMProvider:
@@ -69,10 +74,47 @@ class OllamaLLMProvider:
             breaker=self._breaker,
         )
 
+    async def fast_decide(self, *, system: str, user: str) -> dict[str, Any]:
+        """Make the small live-interview decision without the large JSON path."""
+
+        async def _call() -> dict[str, Any]:
+            response = await self._client.post(
+                "/api/chat",
+                json={
+                    "model": self._model,
+                    "messages": [
+                        {"role": "system", "content": system},
+                        {"role": "user", "content": user},
+                    ],
+                    "stream": False,
+                    "format": FAST_DECISION_SCHEMA,
+                    "options": {
+                        "num_predict": FAST_DECISION_MAX_TOKENS,
+                        "temperature": 0,
+                    },
+                    "keep_alive": -1,
+                },
+            )
+            response.raise_for_status()
+            content = response.json()["message"]["content"]
+            return validate_json_result(
+                parse_json_loosely(content), FAST_DECISION_SCHEMA, provider="Ollama"
+            )
+
+        return await call_with_resilience(
+            _call,
+            provider="ollama",
+            operation="fast_decide",
+            timeout_s=FAST_DECISION_TIMEOUT_S,
+            max_retries=0,
+            breaker=self._breaker,
+        )
+
     async def stream_complete(
         self, *, system: str, user: str, max_tokens: int = 500
     ) -> AsyncIterator[str]:
-        # See groq.py's stream_complete for why this skips call_with_resilience.
+        # Streaming skips call_with_resilience because already-yielded chunks
+        # cannot be safely retried without duplicating output.
         if self._breaker.is_open:
             from app.providers.resilience import CircuitOpenError
 
@@ -162,7 +204,8 @@ class OllamaLLMProvider:
             max_retries=0,
             breaker=self._breaker,
         )
-        return parse_json_loosely(raw)
+        parsed = parse_json_loosely(raw)
+        return validate_json_result(parsed, json_schema, provider="Ollama")
 
     async def health(self) -> bool:
         try:

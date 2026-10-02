@@ -11,7 +11,9 @@ from app.services.interview.engine import (
 from app.services.interview.plan import InterviewPlan, TopicProbe
 
 
-def _plan(n: int = 3, time_budget_s: int = 100) -> InterviewPlan:
+def _plan(
+    n: int = 3, time_budget_s: int = 100, additional_questions: int = 0
+) -> InterviewPlan:
     return InterviewPlan(
         topics=[
             TopicProbe(
@@ -20,6 +22,10 @@ def _plan(n: int = 3, time_budget_s: int = 100) -> InterviewPlan:
                 weight=Decimal("1") / Decimal(n),
                 time_budget_s=time_budget_s,
                 primary_question=f"Question for topic {i}?",
+                additional_questions=[
+                    f"Additional question {question + 1} for topic {i}?"
+                    for question in range(additional_questions)
+                ],
                 follow_up_hints=["detail one", "detail two"],
             )
             for i in range(n)
@@ -34,9 +40,15 @@ def _engine(n: int = 3, time_budget_s: int = 100) -> InterviewEngine:
 
 
 async def test_start_asks_self_introduction() -> None:
-    engine = _engine()
+    engine = InterviewEngine(
+        _plan(),
+        Director(FakeLLMProvider(), provider_name="fake"),
+        candidate_name="Practice User",
+    )
     utterance = engine.start()
     assert utterance.kind == TurnKind.SELF_INTRO
+    assert utterance.text.startswith("Hi Practice User, thanks for joining.")
+    assert "<name>" not in utterance.text
     assert utterance.topic_id is None
 
 
@@ -47,7 +59,7 @@ async def test_self_intro_answer_leads_to_first_topic_question() -> None:
     assert utterance.kind == TurnKind.PRIMARY_QUESTION
     assert "Question for topic 0?" in utterance.text
     assert utterance.topic_id == "comp-0"
-    assert utterance.question_source == "groq"
+    assert utterance.question_source == "deepseek"
 
 
 async def test_full_interview_covers_every_topic() -> None:
@@ -58,7 +70,7 @@ async def test_full_interview_covers_every_topic() -> None:
     elapsed = 5
     utterance = await engine.submit_candidate_answer("Self introduction.", elapsed_s=elapsed)
     asked_topics.add(utterance.topic_id)  # comp-0, asked right after the self-intro
-    for _ in range(50):  # generous cap on turns to avoid an infinite loop on a bug
+    for _ in range(100):  # generous cap on turns to avoid an infinite loop on a bug
         elapsed += 10
         utterance = await engine.submit_candidate_answer(
             "A reasonably detailed answer.", elapsed_s=elapsed
@@ -75,7 +87,10 @@ async def test_full_interview_covers_every_topic() -> None:
 
 
 async def test_fake_director_gives_exactly_one_follow_up_per_topic() -> None:
-    engine = _engine(n=1, time_budget_s=1000)
+    engine = InterviewEngine(
+        _plan(n=1, time_budget_s=1000, additional_questions=1),
+        Director(FakeLLMProvider(), provider_name="fake"),
+    )
     engine.start()
     await engine.submit_candidate_answer("Self introduction.", elapsed_s=5)  # -> comp-0 question
 
@@ -83,8 +98,8 @@ async def test_fake_director_gives_exactly_one_follow_up_per_topic() -> None:
     assert first.kind == TurnKind.FOLLOW_UP
 
     second = await engine.submit_candidate_answer("more detail", elapsed_s=20)
-    # only one topic -> after advancing, engine moves to candidate questions
-    assert second.kind == TurnKind.CANDIDATE_QUESTIONS
+    assert second.kind == TurnKind.PRIMARY_QUESTION
+    assert second.text == "Additional question 1 for topic 0?"
 
 
 async def test_repeated_clarify_is_capped_like_follow_up() -> None:
@@ -123,13 +138,14 @@ async def test_time_cap_forces_close_regardless_of_director() -> None:
     assert engine.is_complete
 
 
-async def test_hard_close_window_forces_close_before_full_time_cap() -> None:
-    engine = _engine(n=5, time_budget_s=1000)
+async def test_closing_window_does_not_end_session_before_full_time_cap() -> None:
+    engine = _engine(n=1, time_budget_s=1000)
     engine.start()
+    await engine.submit_candidate_answer("Self introduction.", elapsed_s=5)
 
     utterance = await engine.submit_candidate_answer("answer", elapsed_s=13 * 60 + 30)
-    assert utterance.kind == TurnKind.CLOSING
-    assert engine.is_complete
+    assert utterance.kind != TurnKind.CLOSING
+    assert not engine.is_complete
 
 
 async def test_topic_time_budget_forces_advance() -> None:
@@ -148,12 +164,47 @@ async def test_candidate_questions_then_closing() -> None:
     engine.start()
     await engine.submit_candidate_answer("Self introduction.", elapsed_s=5)  # -> comp-0 question
 
-    to_candidate_questions = await engine.submit_candidate_answer("answer", elapsed_s=100)
+    to_candidate_questions = await engine.submit_candidate_answer(
+        "answer", elapsed_s=13 * 60 + 30
+    )
     assert to_candidate_questions.kind == TurnKind.CANDIDATE_QUESTIONS
 
-    closing = await engine.submit_candidate_answer("no questions from me", elapsed_s=110)
+    closing = await engine.submit_candidate_answer(
+        "no questions from me", elapsed_s=13 * 60 + 40
+    )
     assert closing.kind == TurnKind.CLOSING
     assert engine.is_complete
+
+
+async def test_focused_interview_does_not_end_before_closing_window() -> None:
+    engine = _engine(n=1, time_budget_s=1000)
+    engine.start()
+    await engine.submit_candidate_answer("Self introduction.", elapsed_s=5)
+    await engine.submit_candidate_answer("thin", elapsed_s=30)  # follow-up
+
+    continuation = await engine.submit_candidate_answer("enough detail", elapsed_s=60)
+
+    assert continuation.kind == TurnKind.PRIMARY_QUESTION
+    assert continuation.topic_id == "comp-0"
+    assert "explore topic 0" in continuation.text.lower()
+    assert not engine.is_complete
+
+
+async def test_focused_interview_runs_until_ninety_percent_closing_window() -> None:
+    engine = InterviewEngine(
+        _plan(n=1, time_budget_s=1000, additional_questions=4),
+        Director(FakeLLMProvider(), provider_name="fake"),
+    )
+    engine.start()
+    utterance = await engine.submit_candidate_answer("Self introduction.", elapsed_s=5)
+    elapsed = 5
+
+    while utterance.kind != TurnKind.CANDIDATE_QUESTIONS:
+        elapsed += 30
+        utterance = await engine.submit_candidate_answer("answer", elapsed_s=elapsed)
+
+    assert elapsed >= 13 * 60 + 30
+    assert not engine.is_complete
 
 
 async def test_engine_resumes_from_saved_state() -> None:

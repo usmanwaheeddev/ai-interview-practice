@@ -1,15 +1,12 @@
 """Interview turn latency spike — phases.md Phase 2, the go/no-go gate.
 
-Measures end-of-speech -> first-agent-audio latency for a full STT -> LLM ->
-TTS turn against whatever providers are configured (LLM_PROVIDER, STT_PROVIDER,
-TTS_PROVIDER in .env). Run via `make interview-cli`.
+Measures the provider portion of end-of-speech -> first-agent-audio latency for
+a full STT -> bounded Director -> TTS turn against the configured providers.
+Run via `make interview-cli`.
 
-Scope note: VAD (end-of-utterance detection) isn't measured here — it needs a
-live audio stream, which doesn't exist until Phase 3/4. Per plan.md §5's stage
-budget, VAD is ~300ms and adds to whatever this harness reports. TTS latency
-here is total synthesis time, not true streaming first-byte time (the
-TTSProvider interface returns a complete WAV) — a conservative (worse) proxy,
-since real streaming in Phase 4 will only improve on this number.
+Scope note: VAD (end-of-utterance detection) isn't measured here — the live
+transport uses a 1.1s endpointing window. TTS is measured as the first
+sentence-sized WAV chunk; the browser queues later chunks in order.
 """
 
 import argparse
@@ -48,9 +45,9 @@ CANDIDATE_ANSWERS = [
 ]
 
 DIRECTOR_SYSTEM_PROMPT = (
-    "You are conducting a structured job interview. Given the candidate's last "
-    "answer, respond with exactly one short follow-up question, under 25 words. "
-    "Do not repeat the question. Do not add commentary."
+    "You are the fast decision layer for a structured job interview. Return "
+    "JSON with action=advance, follow_up, or clarify and a short text value. "
+    "Use at most one short sentence in text."
 )
 
 
@@ -92,7 +89,7 @@ async def run_spike(turns: int) -> bool:
     # which would otherwise land inside turn 1's measured latency and wreck
     # the stats with a one-off cold-start cost. Force that cost out here.
     t0 = time.monotonic()
-    await llm.complete(system="Reply with one word.", user="ping")
+    await llm.fast_decide(system=DIRECTOR_SYSTEM_PROMPT, user="Question: ping\nAnswer: ping")
     print(f"  llm first-inference load took {time.monotonic() - t0:.1f}s")
 
     print("Building fixture audio from candidate-answer text via TTS...")
@@ -117,8 +114,16 @@ async def run_spike(turns: int) -> bool:
         stt_ms = (time.monotonic() - t0) * 1000
 
         t0 = time.monotonic()
-        response = await llm.complete(system=DIRECTOR_SYSTEM_PROMPT, user=transcript.text)
+        decision = await llm.fast_decide(
+            system=DIRECTOR_SYSTEM_PROMPT,
+            user=(
+                "Question: Tell me about a relevant project.\n"
+                f"Candidate answer: {transcript.text}"
+            ),
+        )
         llm_ms = (time.monotonic() - t0) * 1000
+
+        response = str(decision.get("text") or "Let's continue to the next question.")
 
         t0 = time.monotonic()
         await tts.synthesize(response)

@@ -43,8 +43,8 @@ flowchart LR
     end
 
     subgraph AI providers
-        Groq["Groq API\n(cloud LLM)"]
-        Ollama["Ollama\n(self-hosted LLM, default primary)"]
+        DeepSeek["DeepSeek\n(primary hosted LLM)"]
+        Ollama["Ollama\n(self-hosted LLM, fallback)"]
         Whisper["faster-whisper\n(self-hosted STT)"]
         Piper["Piper / espeak-ng\n(self-hosted TTS)"]
     end
@@ -62,11 +62,11 @@ flowchart LR
     Worker -- polls --> Redis
     Worker --> PG
     Worker --> S3
-    REST --> Groq
+    REST --> DeepSeek
     REST --> Ollama
-    WS --> Groq
+    WS --> DeepSeek
     WS --> Ollama
-    Worker --> Groq
+    Worker --> DeepSeek
     Worker --> Ollama
 ```
 
@@ -82,7 +82,7 @@ All components run as Docker Compose services (`docker-compose.yml`):
 | `postgres` | Primary datastore | Postgres 16 |
 | `redis` | Job queue, interview session-state store, connection locks, rate-limit counters | Redis 7 |
 | `rustfs` | RustFS S3-compatible object storage | Resumes and interview recordings; ports `9000` (API) / `9001` (console) |
-| `ollama` | Self-hosted LLM, default primary or fallback | `OLLAMA_KEEP_ALIVE=-1` keeps the model resident in memory once loaded — see [LLM provider fallback](#llm-provider-fallback) |
+| `ollama` | Self-hosted LLM, fallback | `OLLAMA_KEEP_ALIVE=-1` keeps the model resident in memory once loaded — see [LLM provider fallback](#llm-provider-fallback) |
 | `ollama-pull` | One-shot init job | Pulls `OLLAMA_MODEL` and runs a throwaway prompt to warm it before real traffic arrives |
 
 `api` and `worker` both depend on Postgres, Redis, and (for `api`) RustFS being healthy before starting. Whisper models and Piper voices are cached in named volumes (`whisper_models`, `piper_voices`) shared between `api` and `worker` so they aren't re-downloaded on every restart.
@@ -110,7 +110,6 @@ All routers are mounted under `/api`, except the WebSocket handler, which is mou
 | `resumes.py` | `/api/resumes` | `POST ""` (upload), `GET ""` (list), `GET /{id}` |
 | `practice.py` | `/api/mock-interviews` | `POST ""`, `GET ""`, `GET /{id}`, `POST /{id}/retry`, `POST /{id}/consent`, `POST /{id}/rescore`, `GET /{id}/report`, `POST /{id}/media` (presigned upload), `POST /{id}/media/complete` |
 | `gdpr.py` | `/api/me` | `GET /data-export`, `POST /erase` |
-| `provider_tests.py` | `/api/provider-tests` | `POST /groq` (development-only, verifies live Groq connectivity) |
 | `ws/interview.py` | `/ws/mock-interviews/{id}` | WebSocket: the live interview session |
 
 The app also exposes `GET /api/health` (liveness) and `GET /api/ready` (readiness — pings Postgres, Redis, and every configured provider's `.health()`).
@@ -121,7 +120,7 @@ Every external capability is behind a small `Protocol` interface, selected at st
 
 | Capability | Interface | Providers | Selected by |
 |---|---|---|---|
-| LLM | `LLMProvider` (`extract_json`, `complete`, `stream_complete`, `health`) | `fake`, `ollama` (self-hosted), `groq` (cloud, wrapped in `FallbackLLMProvider` with Ollama as fallback) | `LLM_PROVIDER` |
+| LLM | `LLMProvider` (`extract_json`, `complete`, `fast_decide`, `stream_complete`, `health`) | `fake`, `deepseek`, `ollama` (self-hosted fallback) | `LLM_PROVIDER` |
 | Speech-to-text | — | `fake`, `faster_whisper` | `STT_PROVIDER` |
 | Text-to-speech | — | `fake`, `piper` (espeak-ng fallback for Urdu, which has no Piper voice) | `TTS_PROVIDER` |
 | Object storage | — | `fake`, `s3` (RustFS or real S3) | `STORAGE_PROVIDER` |
@@ -130,11 +129,11 @@ Every provider adapter that makes a network call wraps it in the shared `call_wi
 
 ### Services
 
-- **`interview/plan.py`** — generates the interview plan: one probe per topic, built from the resume + job description (or, in language-practice mode, per fixed focus area) via one LLM call each. Falls back to a template question per topic if the LLM call fails or returns unusable JSON, and records that a fallback was used so it's visible rather than silently swallowed.
+- **`interview/plan.py`** — generates the interview plan: all selected resume topics are produced in one structured LLM call, avoiding repeated résumé uploads and serial provider latency. Language-practice mode currently generates one probe per fixed focus area.
 - **`interview/director.py`** — decides, after each candidate answer, whether to ask a follow-up, ask for clarification, or advance to the next topic. Hard constraints (max 2 follow-ups per topic, remaining time budget) are checked in code *before* ever calling the LLM; the LLM is only consulted within those bounds, and a deterministic fallback (one follow-up, then advance) covers LLM failure.
-- **`interview/engine.py`** — a pure, in-memory turn-taking state machine (`InterviewEngine`) that owns topic progression, elapsed time, and turn sequencing. Time-based closing checks (90%/80% of the session duration) always win over the Director's judgment.
+- **`interview/engine.py`** — a pure, in-memory turn-taking state machine (`InterviewEngine`) that owns question-bank progression, elapsed time, and turn sequencing. It advances through multiple questions in a selected area and closes at the 90% session threshold unless the hard duration cap is reached first.
 - **`interview/memory.py`** — condenses a candidate's last two finished sessions into a short text block prepended to planning/judging prompts, so returning candidates get informed follow-ups instead of a blank slate.
-- **`interview/locale.py`** — per-spoken-language (English/Hindi/Urdu) copy: greetings, self-intro prompts, closing lines, fallback questions.
+- **`interview/locale.py`** — fixed conversational copy and language helpers. The current live WebSocket path uses English; Hindi/Urdu provider support remains available for a future selectable spoken-language flow.
 - **`interview/state_store.py`** — persists `EngineState` to Redis so a session survives server restarts and client reconnects.
 - **`interview/vad.py`** — silence-duration voice activity detection on raw PCM audio, used to decide when a candidate has finished speaking.
 - **`scoring/scorer.py`** — one LLM call per topic, scored 1–5, with the model's cited evidence checked against the actual (PII-redacted) transcript. Raises rather than fabricates a score when there's nothing to score (e.g. no spoken answers).
@@ -162,6 +161,7 @@ frontend/src/
   lib/
     api.ts        fetch wrapper (cookie auth, auto-refresh on 401) + hand-rolled SSE-over-POST client
     auth.tsx       auth context (GET /api/auth/me on mount)
+    pendingInterview.ts  session-scoped draft + created-ID persistence for preflight
     types.ts       shared TypeScript types mirroring backend schemas
   components/ui/  Button, Card, Alert, Field, PageShell, StatusPill, Spinner — shared primitives
 ```
@@ -190,7 +190,7 @@ Key tables:
 
 - **`users`** — email (unique), Argon2 password hash, full name, last login.
 - **`resumes`** — storage key, filename, MIME type, extracted raw text, parsed structured fields (JSON), parse status.
-- **`mock_interviews`** — either resume + job-description + topics, *or* spoken language + level (enforced by both a Pydantic validator and a database `CHECK` constraint — never both, never neither); duration constrained to 15 or 30 minutes; spoken language (`en`/`hi`/`ur`); state (see [lifecycle](#mock-interview-lifecycle) below).
+- **`mock_interviews`** — either resume + job-description + topics, *or* programming language + level (enforced by both a Pydantic validator and a database `CHECK` constraint — never both, never neither); duration constrained to 15 or 30 minutes; spoken-language field (currently fixed to English by the live transport); state (see [lifecycle](#mock-interview-lifecycle) below).
 - **`mock_interview_turns`** — one row per turn, speaker (`agent`/`user`), text, timestamp — the transcript.
 - **`mock_media_assets`** — audio/video recording chunks, storage key, a `ready` flag set once upload is confirmed.
 - **`mock_interview_scores`** — overall score, readiness tier, per-dimension scores, strengths/weaknesses/improvements, the model used, and a `failure_reason` if scoring failed.
@@ -228,7 +228,7 @@ sequenceDiagram
     participant W as Worker (arq)
     participant DB as Postgres
     participant R as Redis
-    participant LLM as LLM (Groq/Ollama)
+    participant LLM as LLM (DeepSeek/Ollama)
     participant STT as faster-whisper
     participant TTS as Piper
 
@@ -238,11 +238,13 @@ sequenceDiagram
     W->>LLM: extract_json(resume text)
     W->>DB: update Resume (parsed fields, parse_status=complete)
 
-    B->>API: POST /mock-interviews (resume + JD + topics)
+    B->>B: save setup draft in session storage
+    B->>B: microphone check + candidate consent
+    B->>API: POST /mock-interviews on Begin interview
     API->>DB: create MockInterview (PREPARING)
     API-->>W: enqueue generate_mock_plan
     W->>DB: load memory (last 2 finished sessions)
-    W->>LLM: extract_json per topic probe
+    W->>LLM: one extract_json call for the full question bank
     W->>DB: MockInterview -> READY
 
     B->>API: POST /{id}/consent
@@ -254,11 +256,15 @@ sequenceDiagram
 
     loop each candidate utterance
         B-->>API: binary PCM audio frames
-        API->>STT: transcribe on utterance boundary (VAD, language auto-detected)
-        API->>DB: persist MockInterviewTurn (user), update spoken_language if it changed
-        API->>LLM: Director.decide() (follow_up / clarify / advance)
-        API->>TTS: synthesize agent response
-        API-->>B: audio + transcript.final (agent turn)
+        API->>STT: transcribe English on utterance boundary (VAD)
+        API->>DB: persist MockInterviewTurn (user)
+        API->>LLM: fast_decide() (bounded JSON, recent context only)
+        API->>TTS: synthesize first sentence-sized chunk
+        API-->>B: first audio chunk + agent.speaking_start
+        loop remaining sentence chunks
+            API->>TTS: synthesize next chunk
+            API-->>B: ordered audio chunk
+        end
     end
 
     API->>DB: MockInterview -> COMPLETED
@@ -282,15 +288,16 @@ Every LLM call in the app — plan generation, Director judgments, resume extrac
 flowchart LR
     Caller["Any LLM call site\n(plan, Director, scoring)"] --> Factory["get_llm_provider()"]
     Factory -->|LLM_PROVIDER=fake| Fake["FakeLLMProvider\n(deterministic, tests/CI)"]
-    Factory -->|LLM_PROVIDER=ollama| OF["FallbackLLMProvider\nOllama primary → Groq fallback"]
-    Factory -->|LLM_PROVIDER=groq| GF["FallbackLLMProvider\nGroq primary → Ollama fallback"]
+    Factory -->|LLM_PROVIDER=deepseek| Chain["FallbackLLMProvider\nDeepSeek → Ollama"]
+    Factory -->|LLM_PROVIDER=ollama| OF["Ollama only"]
 ```
 
-- **`FallbackLLMProvider.complete` / `.extract_json`** — try the configured primary; on an exception (rate limit, timeout, malformed response), try the fallback. `LLM_PROVIDER=ollama` is the example configuration default; Groq requires a valid API key.
+- **DeepSeek with Ollama fallback** — `LLM_PROVIDER=deepseek` uses the official DeepSeek API first and switches to local Ollama on a timeout, rate limit, malformed response, or other provider failure.
+- **`FallbackLLMProvider.complete` / `.fast_decide` / `.extract_json`** — all application call sites share the same DeepSeek → Ollama order.
 - **`FallbackLLMProvider.stream_complete`** — only switches providers if the primary fails *before* yielding a single chunk. A partially-streamed response can't be un-sent to a client already forwarding it over SSE, so a mid-stream failure propagates instead of silently switching providers.
-- Both providers share the app-wide `CircuitBreaker`/`call_with_resilience` wrapper (see below).
+- All providers share the app-wide `CircuitBreaker`/`call_with_resilience` wrapper (see below).
 
-**Operational note — Ollama on a CPU-only host:** the `ollama` service sets `OLLAMA_KEEP_ALIVE=-1` and the `ollama-pull` init job pre-warms the model, because an idle Ollama model unloads after 5 minutes by default and reloading it from disk on a CPU-only host takes on the order of 90 seconds — far past any reasonable per-request timeout. `OllamaLLMProvider.complete()` also sends `keep_alive: -1` on every request as defense-in-depth. Separately, `extract_json()` (used for plan generation and resume extraction, which involve much larger prompts) uses a longer, single-attempt timeout (120s, no retries) rather than the short-prompt default (20s, up to 3 attempts) — CPU-bound prompt evaluation on a large prompt can legitimately take longer than 20s even with a warm model, and retrying a sustained-slowness failure just discards the previous attempt's partial KV-cache progress without fixing anything.
+**Operational note — Ollama on a CPU-only host:** the `ollama` service sets `OLLAMA_KEEP_ALIVE=-1` and the `ollama-pull` init job pre-warms the model. `OllamaLLMProvider.fast_decide()` is reserved for the live Director: it uses a small native JSON schema, zero temperature, at most 96 output tokens, and a short timeout. Larger `extract_json()` calls remain available for resume parsing and plan generation but are never used for a normal live turn. On Apple Silicon, a native host Ollama process can use Metal while the default container path remains fully local and free.
 
 ## Resilience patterns
 
@@ -323,11 +330,11 @@ Full list of environment variables lives in `.env.example`. The most consequenti
 
 | Variable | Purpose |
 |---|---|
-| `LLM_PROVIDER` | `fake` / `ollama` / `groq` — see [LLM provider fallback](#llm-provider-fallback) |
-| `GROQ_API_KEY`, `GROQ_MODEL` | Cloud LLM credentials/model (no default key — the app refuses to silently run against a real API with an empty credential) |
-| `OLLAMA_URL`, `OLLAMA_MODEL` | Self-hosted LLM endpoint/model |
-| `STT_PROVIDER`, `STT_ENGINE`, `STT_MODEL_SIZE`, `WHISPER_MODEL_SIZE` | Speech provider, engine (`faster_whisper` or `whisper_cpp`), and model selection; `.env.example` uses `WHISPER_MODEL_SIZE=small` |
-| `TTS_PROVIDER`, `PIPER_VOICE`, `PIPER_VOICE_HI` | Text-to-speech provider and per-language voices (Urdu has no Piper voice and falls back to espeak-ng) |
+| `LLM_PROVIDER` | `fake` / `deepseek` / `ollama` — see [LLM provider fallback](#llm-provider-fallback) |
+| `DEEPSEEK_API_KEY`, `DEEPSEEK_MODEL` | Official DeepSeek credentials/model; defaults to `deepseek-flash` in non-thinking mode |
+| `OLLAMA_URL`, `OLLAMA_MODEL`, `OLLAMA_DOCKER_URL` | Self-hosted LLM endpoint/model; `OLLAMA_DOCKER_URL` selects the container-visible endpoint and can target native macOS Ollama |
+| `STT_PROVIDER`, `STT_ENGINE`, `STT_MODEL_SIZE`, `WHISPER_MODEL_SIZE` | Speech provider, engine (`faster_whisper` or `whisper_cpp`), and model selection; `.env.example` uses the faster `base` model |
+| `TTS_PROVIDER`, `PIPER_VOICE`, `PIPER_VOICE_HI`, `PIPER_VOICES_DIR` | Text-to-speech provider, per-language voices, and optional cache override; local runs default to an OS-specific user cache, containers use a persistent volume (Urdu has no Piper voice and falls back to espeak-ng) |
 | `STORAGE_PROVIDER`, `S3_*` | Object storage endpoint/credentials/bucket |
 | `JWT_SECRET`, `ACCESS_TOKEN_TTL_MINUTES`, `REFRESH_TOKEN_TTL_DAYS` | Auth token signing and lifetimes |
 | `DATABASE_URL`, `REDIS_URL` | Core datastore connections |

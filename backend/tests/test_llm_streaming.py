@@ -49,6 +49,14 @@ class _Succeeds:
         return True
 
 
+class _ReturnsInvalidStructuredOutput:
+    async def extract_json(self, *, prompt, text, json_schema=None) -> dict:
+        return {}
+
+    async def health(self) -> bool:
+        return True
+
+
 async def test_fallback_complete_used_when_primary_fails():
     provider = FallbackLLMProvider(primary=_FailsBeforeFirstChunk(), fallback=_Succeeds())
     assert await provider.complete(system="s", user="u") == "fallback response"
@@ -60,6 +68,15 @@ async def test_fallback_extract_json_used_when_primary_fails():
         "ok": True,
         "_provider": "ollama",
     }
+
+
+async def test_fallback_extract_json_used_when_primary_returns_invalid_shape():
+    provider = FallbackLLMProvider(
+        primary=_ReturnsInvalidStructuredOutput(), fallback=_Succeeds()
+    )
+    assert await provider.extract_json(
+        prompt="p", text="t", json_schema={"type": "object", "required": ["ok"]}
+    ) == {"ok": True, "_provider": "ollama"}
 
 
 async def test_fallback_not_used_when_primary_succeeds():
@@ -104,24 +121,32 @@ async def test_fallback_health_true_if_either_provider_is_healthy():
     assert await FallbackLLMProvider(primary=Unhealthy(), fallback=Unhealthy()).health() is False
 
 
-async def test_get_llm_provider_wraps_groq_with_fallback(monkeypatch):
-    monkeypatch.setattr(get_settings(), "llm_provider", "groq")
-    get_llm_provider.cache_clear()
-    try:
-        assert isinstance(get_llm_provider(), FallbackLLMProvider)
-    finally:
-        get_llm_provider.cache_clear()
-
-async def test_get_llm_provider_wraps_ollama_with_groq_fallback(monkeypatch):
+async def test_get_llm_provider_uses_deepseek_with_ollama_fallback(monkeypatch):
+    from app.providers.llm.deepseek import DeepSeekLLMProvider
     from app.providers.llm.ollama import OllamaLLMProvider
 
-    monkeypatch.setattr(get_settings(), "llm_provider", "ollama")
+    settings = get_settings()
+    monkeypatch.setattr(settings, "llm_provider", "deepseek")
+    monkeypatch.setattr(settings, "deepseek_api_key", "test-key")
     get_llm_provider.cache_clear()
     try:
         provider = get_llm_provider()
         assert isinstance(provider, FallbackLLMProvider)
-        assert isinstance(provider._primary, OllamaLLMProvider)
-        assert provider._primary_name == "ollama"
-        assert provider._fallback_name == "groq"
+        assert isinstance(provider._primary, DeepSeekLLMProvider)
+        assert isinstance(provider._fallback, OllamaLLMProvider)
+        assert provider._primary_name == "deepseek"
+        assert provider._fallback_name == "ollama"
+    finally:
+        get_llm_provider.cache_clear()
+
+
+async def test_get_llm_provider_can_use_ollama_directly(monkeypatch):
+    from app.providers.llm.ollama import OllamaLLMProvider
+
+    settings = get_settings()
+    monkeypatch.setattr(settings, "llm_provider", "ollama")
+    get_llm_provider.cache_clear()
+    try:
+        assert isinstance(get_llm_provider(), OllamaLLMProvider)
     finally:
         get_llm_provider.cache_clear()

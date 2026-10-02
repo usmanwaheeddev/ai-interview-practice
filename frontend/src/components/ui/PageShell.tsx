@@ -1,19 +1,21 @@
 import type { ReactNode } from "react";
-import { AppLayout } from "../layout/AppLayout";
+import { AppLayout, type NavigationSection } from "../layout/AppLayout";
 
 /** Authenticated page frame. AppLayout owns global navigation and account
  * chrome; individual pages provide only their title, actions and content. */
 export function PageShell({
   title,
   actions,
+  activeSection,
   children,
 }: {
   title: string;
   actions?: ReactNode;
+  activeSection?: NavigationSection | null;
   children: ReactNode;
 }) {
   return (
-    <AppLayout title={title} actions={actions}>
+    <AppLayout title={title} actions={actions} activeSection={activeSection}>
       {children}
     </AppLayout>
   );

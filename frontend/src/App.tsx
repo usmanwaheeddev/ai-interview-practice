@@ -31,6 +31,7 @@ export function App() {
 
       <Route path="/practice/new" element={<ProtectedRoute><CreatePracticeInterviewPage /></ProtectedRoute>} />
       <Route path="/practice/language/new" element={<ProtectedRoute><CreateLanguageInterviewPage /></ProtectedRoute>} />
+      <Route path="/practice/preflight" element={<ProtectedRoute><PreflightPage /></ProtectedRoute>} />
       <Route path="/mock-interviews/:interviewId/report" element={<ProtectedRoute><PracticeReportPage /></ProtectedRoute>} />
       <Route
         path="/mock-interviews/:interviewId/preflight"

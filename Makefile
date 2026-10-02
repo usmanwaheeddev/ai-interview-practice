@@ -57,7 +57,7 @@ interview-sim:
 	docker compose exec api python -m app.cli.mock_smoke
 
 ollama-pull:
-	docker compose exec ollama ollama pull $(or $(model),llama3.2:1b)
+	docker compose exec ollama ollama pull $(or $(model),llama3.2:3b)
 
 # Phase 6 hardening — see runbooks/restore-from-backup.md for the full
 # procedure this automates and what to check when it's not a drill.

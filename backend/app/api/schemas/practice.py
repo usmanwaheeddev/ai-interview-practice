@@ -25,9 +25,8 @@ class PracticeInterviewCreateRequest(BaseModel):
     never neither. See MockInterview's DB check constraint for the same rule
     enforced at the storage layer.
 
-    The conversation's spoken language is never chosen here — every interview
-    starts in English and the WS handler auto-detects and switches to
-    whatever the candidate actually speaks, turn by turn."""
+    The conversation's spoken language is never chosen here. The current live
+    interview transport transcribes and speaks English."""
 
     job_description: str | None = Field(None, min_length=40, max_length=20000)
     resume_id: uuid.UUID | None = None

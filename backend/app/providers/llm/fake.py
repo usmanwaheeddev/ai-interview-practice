@@ -29,6 +29,42 @@ class FakeLLMProvider:
     ) -> dict[str, Any]:
         if _SCORING_TASK_MARKER in prompt:
             return json.loads(self._fake_score(prompt))
+        if "BATCH_INTERVIEW_PLAN_V2" in prompt:
+            topic_schemas = (
+                json_schema.get("properties", {}).get("questions", {}).get("properties", {})
+                if json_schema
+                else {}
+            )
+            return {
+                "questions": {
+                    topic_id: {
+                        "primary_questions": [
+                            (
+                                f"Tell me about {number_label} relevant "
+                                f"{topic_id.replace('_', ' ')} project and the trade-offs "
+                                "you made."
+                            )
+                            for number_label in (
+                                ["a"]
+                                if schema["properties"]["primary_questions"]["maxItems"] == 1
+                                else [
+                                    f"a different #{index + 1}"
+                                    for index in range(
+                                        schema["properties"]["primary_questions"]["maxItems"]
+                                    )
+                                ]
+                            )
+                        ],
+                        "follow_up_hints": [
+                            "your specific contribution",
+                            "the trade-offs you considered",
+                            "what you would improve",
+                        ],
+                    }
+                    for topic_id, schema in topic_schemas.items()
+                },
+                "_provider": "fake",
+            }
         if "Create ONE" in prompt and "primary_question" in prompt:
             return {
                 "primary_question": "Tell me about a relevant project and the trade-offs you made.",
@@ -66,6 +102,11 @@ class FakeLLMProvider:
         if _SCORING_TASK_MARKER in system:
             return self._fake_score(system)
         return f"[fake completion for: {user[:60]}]"
+
+    async def fast_decide(self, *, system: str, user: str) -> dict[str, Any]:
+        # Keep this routed through extract_json so test doubles that script
+        # Director decisions continue to work without a vendor call.
+        return await self.extract_json(prompt=system, text=user)
 
     def _fake_score(self, system: str) -> str:
         """Deterministic stand-in for `app/services/scoring/scorer.py`'s

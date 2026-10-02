@@ -6,7 +6,8 @@ import { Card } from "../../components/ui/Card";
 import { Field, Select, Textarea } from "../../components/ui/Field";
 import { PageShell } from "../../components/ui/PageShell";
 import { apiRequest, apiUpload, ApiError } from "../../lib/api";
-import type { MockInterview, PracticeTopic, Resume } from "../../lib/types";
+import { savePendingInterview } from "../../lib/pendingInterview";
+import type { InterviewDraft, PracticeTopic, Resume } from "../../lib/types";
 
 const TOPICS: { value: PracticeTopic; label: string }[] = [
   { value: "all_areas", label: "All areas" },
@@ -60,24 +61,20 @@ export function CreatePracticeInterviewPage() {
     } finally { setBusy(false); }
   };
 
-  const submit = async (event: FormEvent) => {
+  const submit = (event: FormEvent) => {
     event.preventDefault();
-    setBusy(true); setError(null);
-    try {
-      const practice = await apiRequest<MockInterview>("/mock-interviews", {
-        method: "POST",
-        body: {
-          job_description: jobDescription.trim() || null,
-          resume_id: resumeId,
-          topics,
-          duration_minutes: duration,
-          video_enabled: videoEnabled,
-        },
-      });
-      navigate(`/mock-interviews/${practice.id}/preflight`);
-    } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Could not prepare mock interview");
-    } finally { setBusy(false); }
+    setError(null);
+    const draft: InterviewDraft = {
+      job_description: jobDescription.trim() || null,
+      resume_id: resumeId,
+      topics,
+      language: null,
+      level: null,
+      duration_minutes: duration,
+      video_enabled: videoEnabled,
+    };
+    savePendingInterview(draft);
+    navigate("/practice/preflight", {state: {draft, activeSection: "new"}});
   };
 
   return <PageShell title="Create mock interview">
@@ -89,7 +86,7 @@ export function CreatePracticeInterviewPage() {
       <div className="grid gap-4 sm:grid-cols-2"><Field label="Interview length"><Select value={duration} onChange={(e) => setDuration(Number(e.target.value) as 15 | 30)}><option value={15}>15 minutes</option><option value={30}>30 minutes</option></Select></Field><Card className="flex items-center gap-3"><input id="video" type="checkbox" checked={videoEnabled} onChange={(e) => setVideoEnabled(e.target.checked)} /><label htmlFor="video" className="text-sm text-ink-700">Record camera video</label></Card></div>
       {error && <Alert>{error}</Alert>}
       {!busy && !resumeId && <p className="text-sm text-red-600">Upload a resume above before creating an interview.</p>}
-      <Button type="submit" disabled={busy || !resumeId}>{busy ? "Preparing…" : "Create interview"}</Button>
+      <Button type="submit" disabled={busy || !resumeId}>{busy ? "Uploading resume…" : "Continue to device check"}</Button>
       <p className="text-sm text-ink-500">Want to drill a specific language instead? <Link className="underline" to="/practice/language/new">Practice a language interview</Link>.</p>
     </form>
   </PageShell>;

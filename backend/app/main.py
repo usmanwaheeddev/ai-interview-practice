@@ -1,3 +1,4 @@
+import asyncio
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
@@ -7,7 +8,6 @@ from sqlalchemy import text
 from app.api.auth import router as auth_router
 from app.api.gdpr import router as gdpr_router
 from app.api.practice import router as practice_router
-from app.api.provider_tests import router as provider_tests_router
 from app.api.resumes import router as resumes_router
 from app.core.config import get_settings
 from app.core.exceptions import (
@@ -74,7 +74,6 @@ app.include_router(auth_router, prefix="/api")
 app.include_router(practice_router, prefix="/api")
 app.include_router(resumes_router, prefix="/api")
 app.include_router(gdpr_router, prefix="/api")
-app.include_router(provider_tests_router, prefix="/api")
 app.include_router(interview_ws_router)
 
 
@@ -104,11 +103,8 @@ async def ready() -> dict[str, str]:
         get_tts_provider(),
         get_storage_provider(),
     )
-    llm_ok, stt_ok, tts_ok, storage_ok = (
-        await llm.health(),
-        await stt.health(),
-        await tts.health(),
-        await storage.health(),
+    llm_ok, stt_ok, tts_ok, storage_ok = await asyncio.gather(
+        llm.health(), stt.health(), tts.health(), storage.health()
     )
     if not (llm_ok and stt_ok and tts_ok and storage_ok):
         raise ServiceUnavailableError(

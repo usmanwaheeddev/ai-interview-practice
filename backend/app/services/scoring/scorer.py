@@ -1,6 +1,6 @@
 """Evidence-based topic feedback. Unavailable AI never produces a fabricated score."""
 
-import asyncio
+import logging
 from decimal import Decimal
 from typing import Any
 
@@ -9,6 +9,35 @@ from app.services.interview import locale
 from app.services.interview.plan import InterviewPlan
 from app.services.scoring.evidence import verify_evidence
 from app.services.scoring.redaction import redact_transcript
+
+logger = logging.getLogger(__name__)
+
+SCORING_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "value": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 5,
+        },
+        "reasoning": {
+            "type": "string",
+        },
+        "evidence": {
+            "type": "array",
+            "items": {"type": "string"},
+        },
+        "improvement": {
+            "type": "string",
+        },
+    },
+    "required": [
+        "value",
+        "reasoning",
+        "evidence",
+        "improvement",
+    ],
+}
 
 
 async def score_session(
@@ -44,17 +73,35 @@ async def score_session(
             + locale.language_instruction(spoken_language)
             + f"\nTopic: {topic.label}: {topic.description}\nTranscript:\n{redacted}"
         )
-        # Scoring is structured data, so use the provider's JSON path instead
-        # of hoping a general chat completion contains parseable JSON. Groq's
-        # adapter enables JSON mode here; Ollama receives the same explicit
-        # JSON-only prompt with its longer structured-output timeout.
-        parsed = await llm.extract_json(
-            prompt=system,
-            text="Give topic feedback as one JSON object.",
-        )
+        try:
+            parsed = await llm.extract_json(
+                prompt=system,
+                text="Give topic feedback as one JSON object.",
+                json_schema=SCORING_SCHEMA,
+            )
+        except Exception:
+            logger.exception(
+                "LLM topic scoring failed",
+                extra={"topic": topic.label},
+            )
+            raise
         value = parsed.get("value")
+
         if type(value) is not int or not 1 <= value <= 5:
-            raise ValueError("The scoring provider returned invalid feedback. Retry the report.")
+            logger.error(
+                "LLM returned invalid scoring JSON",
+                extra={
+                    "topic": topic.label,
+                    "provider": parsed.get("_provider", "unknown"),
+                    "response_keys": list(parsed.keys()),
+                    "value": repr(value),
+                    "value_type": type(value).__name__,
+                },
+            )
+            raise ValueError(
+                f"LLM returned an invalid score for {topic.label}: "
+                f"value={value!r}, type={type(value).__name__}"
+            )
         evidence = parsed.get("evidence", [])
         if not isinstance(evidence, list):
             evidence = []
@@ -75,9 +122,9 @@ async def score_session(
             ),
         )
 
-    # Topics are independent. Running them together prevents a five-topic
-    # interview from multiplying provider latency until ARQ's job timeout.
-    dimensions = list(await asyncio.gather(*(score_topic(topic) for topic in plan.topics)))
+    dimensions = []
+    for topic in plan.topics:
+        dimensions.append(await score_topic(topic))
     overall = sum(
         (Decimal(d["score"]) * p.weight for d, p in zip(dimensions, plan.topics, strict=True)),
         Decimal(0),

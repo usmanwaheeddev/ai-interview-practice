@@ -12,6 +12,15 @@ export type PracticeTopic = "all_areas" | "system_design" | "programming" | "pro
 export type InterviewLanguage = "python" | "java" | "csharp";
 export type InterviewLevel = "basic" | "advanced" | "practical";
 export type SpokenLanguage = "en" | "hi" | "ur";
+export interface InterviewDraft {
+  resume_id: string | null;
+  job_description: string | null;
+  topics: PracticeTopic[] | null;
+  language: InterviewLanguage | null;
+  level: InterviewLevel | null;
+  duration_minutes: 15 | 30;
+  video_enabled: boolean;
+}
 export type InterviewState = "preparing" | "ready" | "in_progress" | "disconnected" | "completed" | "scoring" | "scored" | "failed";
 export interface MockInterview {
   id: string;

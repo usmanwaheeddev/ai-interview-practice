@@ -1,6 +1,7 @@
+import sys
 from unittest.mock import AsyncMock, patch
 
-from app.core.config import get_settings
+from app.core.config import Settings, get_settings
 from app.providers.tts.piper import PiperTTSProvider
 
 
@@ -38,3 +39,28 @@ async def test_urdu_espeak_failure_raises() -> None:
             assert "espeak-ng" in str(exc)
         else:
             raise AssertionError("expected RuntimeError")
+
+
+async def test_voice_download_uses_active_python_and_configured_directory(tmp_path) -> None:
+    settings = Settings(piper_voices_dir=str(tmp_path))
+    provider = PiperTTSProvider(settings)
+    voice_name = settings.piper_voice
+
+    async def finish_download() -> tuple[bytes, bytes]:
+        (tmp_path / f"{voice_name}.onnx").write_bytes(b"model")
+        (tmp_path / f"{voice_name}.onnx.json").write_text("{}")
+        return b"", b""
+
+    fake_proc = AsyncMock()
+    fake_proc.communicate = AsyncMock(side_effect=finish_download)
+    fake_proc.returncode = 0
+
+    with (
+        patch("asyncio.create_subprocess_exec", return_value=fake_proc) as create_exec,
+        patch("asyncio.to_thread", new=AsyncMock(return_value=object())),
+    ):
+        await provider._ensure_loaded("en")
+
+    args = create_exec.call_args.args
+    assert args[0] == sys.executable
+    assert args[-1] == str(tmp_path)

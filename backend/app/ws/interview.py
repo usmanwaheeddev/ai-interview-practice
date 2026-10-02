@@ -2,6 +2,7 @@
 
 import asyncio
 import json
+import re
 import uuid
 from datetime import UTC, datetime
 from typing import Any, cast
@@ -43,7 +44,7 @@ from app.services.interview.whisper_context import (
 
 # How long the candidate must be silent before their answer is treated as
 # finished and sent for transcription.
-ANSWER_SILENCE_DURATION_MS = 3_000
+ANSWER_SILENCE_DURATION_MS = 1_100
 TRANSCRIPTION_SEGMENT_DURATION_S = 20
 TRANSCRIPTION_OVERLAP_DURATION_MS = 250
 MIN_TRANSCRIPTION_WAIT_S = 45
@@ -52,6 +53,23 @@ TRANSCRIPTION_WAIT_PER_SEGMENT_S = 25
 
 router = APIRouter()
 logger = get_logger(__name__)
+
+
+def _tts_chunks(text: str) -> list[str]:
+    """Split a short agent turn so complete WAV chunks can play incrementally."""
+    sentences = [part.strip() for part in re.split(r"(?<=[.!?])\s+", text.strip()) if part.strip()]
+    if not sentences:
+        return [text.strip()]
+
+    # Avoid producing a sequence of tiny audio files for abbreviations or
+    # short clauses. The browser already queues complete WAV chunks in order.
+    chunks: list[str] = []
+    for sentence in sentences:
+        if chunks and len(chunks[-1]) + len(sentence) + 1 <= 140:
+            chunks[-1] = f"{chunks[-1]} {sentence}"
+        else:
+            chunks.append(sentence)
+    return chunks
 
 
 async def wait_for_session_end(websocket: WebSocket) -> None:
@@ -133,6 +151,7 @@ async def interview_ws(
         ),
         state=await load_state(redis, interview.id),
         spoken_language="en",
+        candidate_name=user.full_name if user else "there",
     )
     stt, tts = get_stt_provider(), get_tts_provider()
     next_index = await db.scalar(
@@ -206,28 +225,38 @@ async def interview_ws(
                 language="en",
             )
         )
-        synthesis = asyncio.create_task(tts.synthesize(utterance.text, language="en"))
         control = asyncio.create_task(wait_for_session_end(websocket))
+        synthesis: asyncio.Task[bytes] | None = None
         try:
-            completed, _ = await asyncio.wait(
-                {synthesis, control},
-                timeout=max(1, min(45, engine.remaining_s)),
-                return_when=asyncio.FIRST_COMPLETED,
-            )
-            if control in completed:
-                control.result()
-                synthesis.cancel()
-                await asyncio.gather(synthesis, return_exceptions=True)
-                await websocket.send_json(
-                    dict(type="agent.speaking_end", turn_id=turn_index - 1)
+            for chunk_text in _tts_chunks(utterance.text):
+                synthesis = asyncio.create_task(tts.synthesize(chunk_text, language="en"))
+                completed, _ = await asyncio.wait(
+                    {synthesis, control},
+                    timeout=max(1, min(45, engine.remaining_s)),
+                    return_when=asyncio.FIRST_COMPLETED,
                 )
-                return True
-            if synthesis not in completed:
-                raise TimeoutError
-            await websocket.send_bytes(synthesis.result())
+                if control in completed:
+                    control.result()
+                    synthesis.cancel()
+                    await asyncio.gather(synthesis, return_exceptions=True)
+                    await websocket.send_json(
+                        dict(type="agent.speaking_end", turn_id=turn_index - 1)
+                    )
+                    return True
+                if synthesis not in completed:
+                    synthesis.cancel()
+                    await asyncio.gather(synthesis, return_exceptions=True)
+                    raise TimeoutError
+                await websocket.send_bytes(synthesis.result())
         except WebSocketDisconnect:
             raise
-        except Exception:
+        except Exception as exc:
+            logger.exception(
+                "tts.synthesis_failed",
+                error=str(exc) or type(exc).__name__,
+                voice=get_settings().piper_voice,
+                voices_dir=get_settings().piper_voices_dir,
+            )
             await websocket.send_json(
                 dict(
                     type="error",
@@ -237,7 +266,7 @@ async def interview_ws(
                 )
             )
         finally:
-            if not synthesis.done():
+            if synthesis is not None and not synthesis.done():
                 synthesis.cancel()
                 await asyncio.gather(synthesis, return_exceptions=True)
             control.cancel()

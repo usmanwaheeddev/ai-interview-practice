@@ -3,6 +3,7 @@ from unittest.mock import AsyncMock
 import httpx
 
 from app.core.config import Settings
+from app.providers.llm.fast_decision import FAST_DECISION_SCHEMA
 from app.providers.llm.ollama import OllamaLLMProvider
 
 
@@ -43,3 +44,23 @@ async def test_ollama_extract_json_passes_required_schema() -> None:
     await provider.extract_json(prompt="Create a question.", text="Resume", json_schema=schema)
 
     assert post.await_args.kwargs["json"]["format"] == schema
+
+
+async def test_ollama_fast_decide_is_bounded_and_structured() -> None:
+    provider = OllamaLLMProvider(Settings())
+    response = httpx.Response(
+        200,
+        json={"message": {"content": '{"action":"follow_up","text":"What broke?"}'}},
+        request=httpx.Request("POST", "http://localhost:11434/api/chat"),
+    )
+    post = AsyncMock(return_value=response)
+    provider._client.post = post  # type: ignore[method-assign]
+
+    result = await provider.fast_decide(system="judge", user="answer")
+
+    assert result == {"action": "follow_up", "text": "What broke?"}
+    payload = post.await_args.kwargs["json"]
+    assert payload["format"] == FAST_DECISION_SCHEMA
+    assert payload["stream"] is False
+    assert payload["options"] == {"num_predict": 96, "temperature": 0}
+    assert payload["keep_alive"] == -1

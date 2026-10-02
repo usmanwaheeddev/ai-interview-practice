@@ -7,9 +7,12 @@ from app.services.scoring.scorer import score_session
 
 
 class StructuredOnlyLLM:
-    async def extract_json(self, *, prompt: str, text: str) -> dict:
+    async def extract_json(
+        self, *, prompt: str, text: str, json_schema: dict | None = None
+    ) -> dict:
         assert "SCORING_TASK_V1" in prompt
         assert "JSON object" in text
+        assert json_schema is not None
         return {
             "value": 4,
             "reasoning": "The answer described an explicit reliability technique.",

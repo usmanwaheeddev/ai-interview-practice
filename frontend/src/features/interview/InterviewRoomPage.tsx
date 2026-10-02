@@ -48,7 +48,7 @@ export function InterviewRoomPage() {
   const [processing, setProcessing] = useState(false);
   const [endingInterview, setEndingInterview] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [activeLlm, setActiveLlm] = useState<"groq" | "ollama" | null>(null);
+  const [activeLlm, setActiveLlm] = useState<"deepseek" | "ollama" | null>(null);
 
   const socketRef = useRef<InterviewSocket | null>(null);
   const playbackRef = useRef<AudioPlaybackQueue | null>(null);
@@ -151,7 +151,7 @@ export function InterviewRoomPage() {
           processingRef.current = false;
           interviewerTurnRef.current = true;
           setProcessing(false);
-          if (msg.question_source === "groq" || msg.question_source === "ollama") {
+          if (msg.question_source === "deepseek" || msg.question_source === "ollama") {
             setActiveLlm(msg.question_source);
           }
           setTranscript((prev) => [
@@ -335,7 +335,7 @@ export function InterviewRoomPage() {
           {endingInterview ? <><Spinner className="h-4 w-4" /> Ending interview…</> : "End interview and get feedback"}
         </Button>
         {muted && <StatusPill tone="warning">Microphone muted</StatusPill>}
-        {activeLlm && <StatusPill tone="info">LLM: {activeLlm === "groq" ? "Groq" : "Ollama"}</StatusPill>}
+        {activeLlm && <StatusPill tone="info">LLM: {activeLlm === "deepseek" ? "DeepSeek" : "Ollama"}</StatusPill>}
       </div>
       {error && <Alert>{error}</Alert>}
 
@@ -396,14 +396,12 @@ export function InterviewRoomPage() {
               {entry.speaker === "agent" ? "Interviewer" : "You"}:
             </strong>{" "}
             {entry.speaker === "agent" &&
-              (entry.questionSource === "groq" || entry.questionSource === "ollama") && (
+              (["deepseek", "ollama"].includes(entry.questionSource ?? "")) && (
               <StatusPill
                 tone="info"
                 className="mr-2 align-middle"
               >
-                {entry.questionSource === "groq"
-                  ? "Groq"
-                  : "Ollama"}
+                {entry.questionSource === "deepseek" ? "DeepSeek" : "Ollama"}
               </StatusPill>
             )}
             {entry.text}

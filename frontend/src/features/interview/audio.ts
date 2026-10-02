@@ -95,9 +95,9 @@ export function startMicCapture(
   };
 }
 
-/** Sequential playback of agent audio chunks (each a complete WAV — see
- * 12's known-limits note: this isn't true streaming
- * playback, since our TTS providers return a complete file, not a stream). */
+/** Sequential playback of agent audio chunks. The backend splits longer agent
+ * turns into sentence-sized complete WAVs so the first chunk can play before
+ * later chunks finish synthesizing. */
 export class AudioPlaybackQueue {
   private queue: Blob[] = [];
   private playing = false;

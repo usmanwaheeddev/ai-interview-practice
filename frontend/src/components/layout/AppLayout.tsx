@@ -3,6 +3,7 @@ import { Link, NavLink, useLocation } from "react-router-dom";
 import { useAuth } from "../../lib/auth";
 
 type IconName = "add" | "history" | "menu" | "panel" | "logout" | "language";
+export type NavigationSection = "new" | "language" | "history";
 
 function Icon({ name, className = "h-5 w-5" }: { name: IconName; className?: string }) {
   const paths: Record<IconName, ReactNode> = {
@@ -31,18 +32,20 @@ function Icon({ name, className = "h-5 w-5" }: { name: IconName; className?: str
 }
 
 const navigation = [
-  { label: "New interview", to: "/practice/new", icon: "add" as const },
-  { label: "Language interview", to: "/practice/language/new", icon: "language" as const },
-  { label: "Interview history", to: "/mock-interviews", icon: "history" as const },
+  { section: "new" as const, label: "New interview", to: "/practice/new", icon: "add" as const },
+  { section: "language" as const, label: "Language interview", to: "/practice/language/new", icon: "language" as const },
+  { section: "history" as const, label: "Interview history", to: "/mock-interviews", icon: "history" as const },
 ];
 
 export function AppLayout({
   title,
   actions,
+  activeSection,
   children,
 }: {
   title: string;
   actions?: ReactNode;
+  activeSection?: NavigationSection | null;
   children: ReactNode;
 }) {
   const { user, logout } = useAuth();
@@ -91,7 +94,7 @@ export function AppLayout({
             title={isCollapsed ? item.label : undefined}
             className={({ isActive }) =>
               `group flex min-h-11 items-center gap-3 rounded-xl px-3 text-sm font-medium transition-all duration-200 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-400 ${
-                isActive
+                (activeSection === undefined ? isActive : activeSection === item.section)
                   ? "bg-white/10 text-white shadow-sm ring-1 ring-inset ring-white/10"
                   : "text-slate-400 hover:bg-white/[0.06] hover:text-slate-100"
               }`

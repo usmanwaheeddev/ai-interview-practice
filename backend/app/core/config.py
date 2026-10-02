@@ -1,6 +1,21 @@
+import os
+import sys
 from functools import lru_cache
+from pathlib import Path
 
+from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+def default_piper_voices_dir() -> str:
+    """Return a writable, per-user cache directory on each supported OS."""
+    if sys.platform == "darwin":
+        cache_root = Path.home() / "Library" / "Caches"
+    elif os.name == "nt":
+        cache_root = Path(os.environ.get("LOCALAPPDATA", Path.home() / "AppData" / "Local"))
+    else:
+        cache_root = Path(os.environ.get("XDG_CACHE_HOME", Path.home() / ".cache"))
+    return str(cache_root / "ai-interview-practice" / "piper-voices")
 
 
 class Settings(BaseSettings):
@@ -34,7 +49,7 @@ class Settings(BaseSettings):
     trust_proxy_headers: bool = False
 
     # Provider selection — see architecture.md §7
-    llm_provider: str = "fake"
+    llm_provider: str = "deepseek"
     stt_provider: str = "fake"
     # STT_PROVIDER remains the broad provider switch (including "fake").
     # STT_ENGINE selects the concrete local Whisper implementation.
@@ -42,14 +57,14 @@ class Settings(BaseSettings):
     tts_provider: str = "fake"
     storage_provider: str = "s3"
 
+    # DeepSeek is primary; local Ollama is its only fallback.
+    deepseek_api_key: str = ""
+    deepseek_model: str = "deepseek-flash"
+
     # Self-hosted provider config — memory.md ADR-014
     ollama_url: str = "http://localhost:11434"
-    ollama_model: str = "llama3.2:1b"
+    ollama_model: str = "llama3.2:3b"
 
-    # Cloud free-tier LLM — memory.md ADR-017. No default key: the app must
-    # not silently start with an empty credential against a real API.
-    groq_api_key: str = ""
-    groq_model: str = "qwen/qwen3.8-27b"
     # Multilingual (English/Hindi/Urdu) — "tiny"/"base" multilingual quality
     # is noticeably worse than English-only "tiny.en" was, which first moved
     # this up to "small". Moved back down to "base" since: on this app's
@@ -79,7 +94,9 @@ class Settings(BaseSettings):
     # Piper ships no Urdu voice — the Urdu path in PiperTTSProvider falls
     # back to espeak-ng instead of a downloaded voice model.
     piper_voice_hi: str = "hi_IN-pratham-medium"
-    piper_voices_dir: str = "/opt/piper-voices"
+    # Local runs use a writable OS-specific user cache. Containers override
+    # this with the path backed by their persistent piper_voices volume.
+    piper_voices_dir: str = Field(default_factory=default_piper_voices_dir)
 
 
 @lru_cache

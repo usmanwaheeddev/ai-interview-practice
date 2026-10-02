@@ -165,6 +165,69 @@ async def test_provider_failure_plan_fallback():
         await generate_interview_plan(interview=interview, resume=resume, llm=Unavailable())
 
 
+async def test_resume_plan_generates_all_topics_in_one_llm_call():
+    class RecordingLLM:
+        def __init__(self):
+            self.calls = 0
+
+        async def extract_json(self, *, json_schema, **kwargs):
+            self.calls += 1
+            topic_schemas = json_schema["properties"]["questions"]["properties"]
+            return {
+                "questions": {
+                    topic_id: {
+                        "primary_questions": [
+                            f"Question {index + 1} for {topic_id}?"
+                            for index in range(
+                                schema["properties"]["primary_questions"]["maxItems"]
+                            )
+                        ],
+                        "follow_up_hints": ["one", "two", "three"],
+                    }
+                    for topic_id, schema in topic_schemas.items()
+                },
+                "_provider": "recording",
+            }
+
+    llm = RecordingLLM()
+    interview = MockInterview(
+        job_description="Python backend",
+        topics=["all_areas"],
+        duration_minutes=30,
+    )
+    resume = Resume(raw_text="Python", parsed={"experience": ["Built APIs"]})
+
+    plan = await generate_interview_plan(interview=interview, resume=resume, llm=llm)
+
+    assert llm.calls == 1
+    assert [probe.id for probe in plan.topics] == [
+        "system_design",
+        "programming",
+        "problem_solving",
+        "behavioral",
+        "database",
+        "architecture",
+    ]
+    assert all(probe.question_source == "recording" for probe in plan.topics)
+    assert sum(1 + len(probe.additional_questions) for probe in plan.topics) == 10
+
+
+async def test_focused_plan_generates_duration_sized_question_bank():
+    interview = MockInterview(
+        job_description="Python backend",
+        topics=["programming"],
+        duration_minutes=15,
+    )
+    resume = Resume(raw_text="Python", parsed={"experience": ["Built APIs"]})
+
+    plan = await generate_interview_plan(
+        interview=interview, resume=resume, llm=FakeLLMProvider()
+    )
+
+    assert len(plan.topics) == 1
+    assert 1 + len(plan.topics[0].additional_questions) == 5
+
+
 async def test_language_interview_plan_fallback():
     class Unavailable:
         async def extract_json(self, **kwargs):
