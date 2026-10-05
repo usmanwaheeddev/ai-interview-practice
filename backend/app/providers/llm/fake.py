@@ -27,6 +27,15 @@ class FakeLLMProvider:
         text: str,
         json_schema: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
+        if "SELF_INTRO_DECISION_V1" in prompt:
+            introduction = text.rsplit("Candidate introduction:", 1)[-1].strip()
+            if len(introduction.split()) >= 4:
+                return {"action": "advance", "text": "", "_provider": "fake"}
+            return {
+                "action": "clarify",
+                "text": "Please tell me a little about your background, skills, or experience.",
+                "_provider": "fake",
+            }
         if _SCORING_TASK_MARKER in prompt:
             return json.loads(self._fake_score(prompt))
         if "BATCH_INTERVIEW_PLAN_V2" in prompt:

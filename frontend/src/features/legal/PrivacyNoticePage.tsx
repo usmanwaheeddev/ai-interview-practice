@@ -4,7 +4,7 @@ export function PrivacyNoticePage() {
   return (
     <div className="mx-auto flex max-w-2xl flex-col gap-6 px-6 py-8">
       <h1 className="text-2xl font-semibold">Mock Interview Privacy Notice</h1>
-      <p>AI uses your resume, job description, and selected topics for personal practice.
+      <p>AI uses your resume, job description, selected field, and selected areas for personal practice.
         Choose 15 or 30 minutes. Questions are spoken and shown as text.</p>
       <p>Your microphone audio and transcript are recorded. Camera recording is optional.
         Recordings are for your review. Feedback uses answer content, not appearance,

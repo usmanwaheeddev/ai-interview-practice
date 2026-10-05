@@ -150,10 +150,19 @@ class InterviewEngine:
             return AgentUtterance(kind=TurnKind.CLOSING, text=self._closing())
 
         if not self.state.self_intro_done:
-            # The self-introduction answer isn't judged by the Director —
-            # move straight into the first real topic's question, with that
-            # topic's time budget starting now rather than being eaten into
-            # by however long the introduction took.
+            # The opening answer must be meaningful before topic one starts.
+            # This uses the configured LLM rather than silently advancing on
+            # a greeting, noise, or an empty introduction.
+            intro_decision = await self.director.decide_self_intro(
+                candidate_answer=text,
+                session_history=session_history,
+            )
+            if intro_decision.action != DirectorAction.ADVANCE:
+                return AgentUtterance(
+                    kind=TurnKind.CLARIFY,
+                    text=intro_decision.text,
+                    question_source=intro_decision.question_source,
+                )
             self.state.self_intro_done = True
             self.state.current_block_started_at_s = elapsed_s
             first_probe = self.plan.topics[0]

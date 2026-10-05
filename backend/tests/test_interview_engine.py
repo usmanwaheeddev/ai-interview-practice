@@ -62,13 +62,32 @@ async def test_self_intro_answer_leads_to_first_topic_question() -> None:
     assert utterance.question_source == "deepseek"
 
 
+async def test_meaningless_self_intro_is_clarified_before_first_topic() -> None:
+    engine = _engine()
+    engine.start()
+
+    utterance = await engine.submit_candidate_answer("hello", elapsed_s=5)
+
+    assert utterance.kind == TurnKind.CLARIFY
+    assert utterance.topic_id is None
+    assert not engine.state.self_intro_done
+
+    first_topic = await engine.submit_candidate_answer(
+        "I am a backend engineer with five years of experience.", elapsed_s=10
+    )
+    assert first_topic.kind == TurnKind.PRIMARY_QUESTION
+    assert first_topic.topic_id == "comp-0"
+
+
 async def test_full_interview_covers_every_topic() -> None:
     engine = _engine(n=3, time_budget_s=1000)  # generous budget, never forces advance on time
     engine.start()
 
     asked_topics: set[str] = set()
     elapsed = 5
-    utterance = await engine.submit_candidate_answer("Self introduction.", elapsed_s=elapsed)
+    utterance = await engine.submit_candidate_answer(
+        "I am a software engineer with project experience.", elapsed_s=elapsed
+    )
     asked_topics.add(utterance.topic_id)  # comp-0, asked right after the self-intro
     for _ in range(100):  # generous cap on turns to avoid an infinite loop on a bug
         elapsed += 10
@@ -92,7 +111,9 @@ async def test_fake_director_gives_exactly_one_follow_up_per_topic() -> None:
         Director(FakeLLMProvider(), provider_name="fake"),
     )
     engine.start()
-    await engine.submit_candidate_answer("Self introduction.", elapsed_s=5)  # -> comp-0 question
+    await engine.submit_candidate_answer(
+        "I am a software engineer with project experience.", elapsed_s=5
+    )  # -> comp-0 question
 
     first = await engine.submit_candidate_answer("thin answer", elapsed_s=10)
     assert first.kind == TurnKind.FOLLOW_UP
@@ -110,11 +131,15 @@ async def test_repeated_clarify_is_capped_like_follow_up() -> None:
 
     class AlwaysClarifyProvider(FakeLLMProvider):
         async def extract_json(self, *, prompt: str, text: str) -> dict:
+            if "SELF_INTRO_DECISION_V1" in prompt:
+                return {"action": "advance", "text": ""}
             return {"action": "clarify", "text": "Could you say that again?"}
 
     engine = InterviewEngine(_plan(n=2, time_budget_s=1000), Director(AlwaysClarifyProvider()))
     engine.start()
-    await engine.submit_candidate_answer("Self introduction.", elapsed_s=5)  # -> comp-0 question
+    await engine.submit_candidate_answer(
+        "I am a software engineer with project experience.", elapsed_s=5
+    )  # -> comp-0 question
 
     first = await engine.submit_candidate_answer("mumble", elapsed_s=10)
     assert first.kind == TurnKind.CLARIFY
@@ -141,7 +166,9 @@ async def test_time_cap_forces_close_regardless_of_director() -> None:
 async def test_closing_window_does_not_end_session_before_full_time_cap() -> None:
     engine = _engine(n=1, time_budget_s=1000)
     engine.start()
-    await engine.submit_candidate_answer("Self introduction.", elapsed_s=5)
+    await engine.submit_candidate_answer(
+        "I am a software engineer with project experience.", elapsed_s=5
+    )
 
     utterance = await engine.submit_candidate_answer("answer", elapsed_s=13 * 60 + 30)
     assert utterance.kind != TurnKind.CLOSING
@@ -151,7 +178,9 @@ async def test_closing_window_does_not_end_session_before_full_time_cap() -> Non
 async def test_topic_time_budget_forces_advance() -> None:
     engine = _engine(n=2, time_budget_s=30)
     engine.start()
-    await engine.submit_candidate_answer("Self introduction.", elapsed_s=5)  # -> comp-0 question
+    await engine.submit_candidate_answer(
+        "I am a software engineer with project experience.", elapsed_s=5
+    )  # -> comp-0 question
 
     # elapsed_s far exceeds this topic's 30s budget -> hard constraint
     # forces ADVANCE without needing multiple follow-up rounds.
@@ -162,7 +191,9 @@ async def test_topic_time_budget_forces_advance() -> None:
 async def test_candidate_questions_then_closing() -> None:
     engine = _engine(n=1, time_budget_s=5)  # tiny budget -> advances immediately
     engine.start()
-    await engine.submit_candidate_answer("Self introduction.", elapsed_s=5)  # -> comp-0 question
+    await engine.submit_candidate_answer(
+        "I am a software engineer with project experience.", elapsed_s=5
+    )  # -> comp-0 question
 
     to_candidate_questions = await engine.submit_candidate_answer(
         "answer", elapsed_s=13 * 60 + 30
@@ -179,7 +210,9 @@ async def test_candidate_questions_then_closing() -> None:
 async def test_focused_interview_does_not_end_before_closing_window() -> None:
     engine = _engine(n=1, time_budget_s=1000)
     engine.start()
-    await engine.submit_candidate_answer("Self introduction.", elapsed_s=5)
+    await engine.submit_candidate_answer(
+        "I am a software engineer with project experience.", elapsed_s=5
+    )
     await engine.submit_candidate_answer("thin", elapsed_s=30)  # follow-up
 
     continuation = await engine.submit_candidate_answer("enough detail", elapsed_s=60)
@@ -196,7 +229,9 @@ async def test_focused_interview_runs_until_ninety_percent_closing_window() -> N
         Director(FakeLLMProvider(), provider_name="fake"),
     )
     engine.start()
-    utterance = await engine.submit_candidate_answer("Self introduction.", elapsed_s=5)
+    utterance = await engine.submit_candidate_answer(
+        "I am a software engineer with project experience.", elapsed_s=5
+    )
     elapsed = 5
 
     while utterance.kind != TurnKind.CANDIDATE_QUESTIONS:
@@ -211,7 +246,9 @@ async def test_engine_resumes_from_saved_state() -> None:
     plan = _plan(n=2, time_budget_s=1000)
     engine = InterviewEngine(plan, Director(FakeLLMProvider(), provider_name="fake"))
     engine.start()
-    await engine.submit_candidate_answer("Self introduction.", elapsed_s=5)  # -> comp-0 question
+    await engine.submit_candidate_answer(
+        "I am a software engineer with project experience.", elapsed_s=5
+    )  # -> comp-0 question
     await engine.submit_candidate_answer("thin", elapsed_s=10)  # -> follow_up
 
     saved_state = engine.state

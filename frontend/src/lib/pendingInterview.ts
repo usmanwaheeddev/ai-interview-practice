@@ -1,4 +1,5 @@
 import type { InterviewDraft } from "./types";
+import { ALL_PRACTICE_TOPICS, INTERVIEW_FIELDS } from "./interviewFields";
 
 const STORAGE_KEY = "pending-interview-draft";
 
@@ -7,15 +8,6 @@ interface PendingInterviewState {
   createdInterviewId?: string;
 }
 
-const practiceTopics = new Set([
-  "all_areas",
-  "system_design",
-  "programming",
-  "problem_solving",
-  "behavioral",
-  "database",
-  "architecture",
-]);
 const interviewLanguages = new Set(["python", "java", "csharp"]);
 const interviewLevels = new Set(["basic", "advanced", "practical"]);
 
@@ -32,11 +24,17 @@ function isDraft(value: unknown): value is InterviewDraft {
     (draft.job_description === null || typeof draft.job_description === "string") &&
     Array.isArray(draft.topics) &&
     draft.topics.length > 0 &&
-    draft.topics.every(topic => practiceTopics.has(topic)) &&
+    typeof draft.field_type === "string" &&
+    draft.field_type in INTERVIEW_FIELDS &&
+    draft.topics.every(topic => topic === "all_areas" || ALL_PRACTICE_TOPICS.has(topic)) &&
+    ((draft.topics.length === 1 && draft.topics[0] === "all_areas") || draft.topics.every(topic =>
+      INTERVIEW_FIELDS[draft.field_type as keyof typeof INTERVIEW_FIELDS].areas.some(area => area.value === topic)
+    )) &&
     draft.language === null &&
     draft.level === null;
   const languageMode =
     draft.resume_id === null &&
+    draft.field_type === null &&
     draft.job_description === null &&
     draft.topics === null &&
     typeof draft.language === "string" &&

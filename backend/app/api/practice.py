@@ -26,6 +26,7 @@ from app.db.models import (
 )
 from app.db.session import get_db
 from app.providers.storage import get_storage_provider
+from app.services.interview.fields import expand_areas
 
 router = APIRouter(prefix="/mock-interviews", tags=["mock-interviews"])
 
@@ -45,6 +46,7 @@ def response(i: MockInterview) -> PracticeInterviewResponse:
     return PracticeInterviewResponse(
         id=i.id,
         resume_id=i.resume_id,
+        field_type=i.field_type,
         topics=i.topics,
         language=i.language,
         level=i.level,
@@ -83,7 +85,8 @@ async def create_interview(
             user_id=user.id,
             resume_id=body.resume_id,
             job_description=body.job_description,
-            topics=body.topics,
+            field_type=body.field_type,
+            topics=expand_areas(body.field_type or "", body.topics or []),
             duration_minutes=body.duration_minutes,
             video_enabled=body.video_enabled,
         )

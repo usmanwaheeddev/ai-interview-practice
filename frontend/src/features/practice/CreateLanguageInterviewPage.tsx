@@ -30,6 +30,7 @@ export function CreateLanguageInterviewPage() {
     event.preventDefault();
     const draft: InterviewDraft = {
       resume_id: null,
+      field_type: null,
       job_description: null,
       topics: null,
       language,

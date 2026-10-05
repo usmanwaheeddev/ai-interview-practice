@@ -10,6 +10,7 @@ import {
 
 const resumeDraft: InterviewDraft = {
   resume_id: "6f90c619-1ea7-4e2d-9905-7085fb419fd4",
+  field_type: "computer_science",
   job_description: null,
   topics: ["programming"],
   language: null,
@@ -48,6 +49,16 @@ describe("pending interview storage", () => {
     sessionStorage.setItem("pending-interview-draft", JSON.stringify({
       ...resumeDraft,
       topics: ["not-a-topic"],
+    }));
+
+    expect(loadPendingInterview()).toBeNull();
+  });
+
+  it("rejects an area from a different field", () => {
+    sessionStorage.setItem("pending-interview-draft", JSON.stringify({
+      ...resumeDraft,
+      field_type: "physics",
+      topics: ["database"],
     }));
 
     expect(loadPendingInterview()).toBeNull();

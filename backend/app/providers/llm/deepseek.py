@@ -15,8 +15,8 @@ from app.providers.llm.fast_decision import (
 from app.providers.resilience import CircuitBreaker, call_with_resilience
 from app.services.json_parsing import parse_json_loosely, validate_json_result
 
-DEEPSEEK_STRUCTURED_READ_TIMEOUT_S = 520.0
-DEEPSEEK_STRUCTURED_OPERATION_TIMEOUT_S = 525.0
+DEEPSEEK_STRUCTURED_READ_TIMEOUT_S = 40.0
+DEEPSEEK_STRUCTURED_OPERATION_TIMEOUT_S = 45.0
 DEEPSEEK_STRUCTURED_MAX_TOKENS = 2_048
 
 

@@ -5,6 +5,7 @@ import { useAuth } from "../../lib/auth";
 import { Alert } from "../../components/ui/Alert";
 import { Button } from "../../components/ui/Button";
 import { Field, Input } from "../../components/ui/Field";
+import {PasswordInput} from "../../components/ui/PasswordInput";
 import { PublicShell } from "../../components/ui/PageShell";
 
 export function RegisterCandidatePage() {
@@ -49,8 +50,7 @@ export function RegisterCandidatePage() {
           />
         </Field>
         <Field label="Password">
-          <Input
-            type="password"
+          <PasswordInput
             required
             minLength={8}
             value={password}

@@ -52,12 +52,10 @@ class SpokenLanguage(StrEnum):
     UR = "ur"
 
 
-# Exactly one of (resume_id, job_description) or (language, level) must be
-# set — a mock interview is either resume/job-description driven or a
-# language practice drill, never both and never neither.
+# Exactly one complete mode must be set: resume + field, or language + level.
 _EXACTLY_ONE_MODE = (
-    "(resume_id IS NOT NULL AND language IS NULL AND level IS NULL) "
-    "OR (resume_id IS NULL AND job_description IS NULL "
+    "(resume_id IS NOT NULL AND field_type IS NOT NULL AND language IS NULL AND level IS NULL) "
+    "OR (resume_id IS NULL AND job_description IS NULL AND field_type IS NULL "
     "AND language IS NOT NULL AND level IS NOT NULL)"
 )
 
@@ -75,6 +73,7 @@ class MockInterview(UUIDPk, TimestampMixin, Base):
         ForeignKey("resumes.id", ondelete="RESTRICT")
     )
     job_description: Mapped[str | None] = mapped_column(Text)
+    field_type: Mapped[str | None] = mapped_column(String(40))
     language: Mapped[MockInterviewLanguage | None] = mapped_column(
         str_enum_column(MockInterviewLanguage, 10)
     )

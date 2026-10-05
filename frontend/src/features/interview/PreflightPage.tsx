@@ -8,6 +8,7 @@ import {
   savePendingInterviewId,
 } from "../../lib/pendingInterview";
 import type { InterviewDraft, MockInterview } from "../../lib/types";
+import { areaLabel, INTERVIEW_FIELDS } from "../../lib/interviewFields";
 import { startMicCapture, type MicCapture } from "./audio";
 import { Alert } from "../../components/ui/Alert";
 import { Button } from "../../components/ui/Button";
@@ -29,16 +30,6 @@ function SetupIcon({name, className = "h-5 w-5"}: {name: SetupIcon; className?: 
   };
   return <svg aria-hidden="true" className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">{paths[name]}</svg>;
 }
-
-const topicLabels: Record<string, string> = {
-  all_areas: "All interview areas",
-  system_design: "System design",
-  programming: "Programming",
-  problem_solving: "Problem solving",
-  behavioral: "Behavioral",
-  database: "Database",
-  architecture: "Architecture",
-};
 
 export function PreflightPage() {
   const { interviewId } = useParams();
@@ -105,10 +96,16 @@ export function PreflightPage() {
     return () => { cancelled = true; clearTimeout(timer); };
   }, [interviewId, navigate, retry]);
 
-  useEffect(() => () => {
-    mounted.current = false;
-    capture.current?.stop();
-    stream.current?.getTracks().forEach(t => t.stop());
+  useEffect(() => {
+    // React Strict Mode runs setup -> cleanup -> setup once in development.
+    // Restore the flag during setup so the first diagnostic cleanup does not
+    // make waitForReady() treat this still-mounted page as closed forever.
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+      capture.current?.stop();
+      stream.current?.getTracks().forEach(t => t.stop());
+    };
   }, []);
 
   const allow = async () => {
@@ -164,7 +161,10 @@ export function PreflightPage() {
       clearPendingInterview();
       navigate(`/mock-interviews/${id}/room`);
     } catch(err) {
-      if (err instanceof DOMException && err.name === "AbortError") return;
+      if (err instanceof DOMException && err.name === "AbortError") {
+        if (mounted.current) setBusy(false);
+        return;
+      }
       setError(err instanceof ApiError || err instanceof Error ? err.message : "Could not start interview.");
       setBusy(false);
     }
@@ -191,7 +191,10 @@ export function PreflightPage() {
     : draft?.language ? "language" as const : navigationState?.activeSection ?? (draft ? "new" : null);
   const focusLabel = configuration?.language
     ? `${configuration.language === "csharp" ? "C#" : configuration.language[0].toUpperCase() + configuration.language.slice(1)} · ${configuration.level ?? "practice"}`
-    : configuration?.topics?.map(topic => topicLabels[topic] ?? topic).join(", ") ?? "";
+    : configuration?.topics?.map(topic => topic === "all_areas" ? "All areas" : areaLabel(topic)).join(", ") ?? "";
+  const fieldLabel = configuration?.field_type
+    ? INTERVIEW_FIELDS[configuration.field_type].label
+    : null;
 
   return <PageShell
     title={interview?.state === "preparing" ? "Preparing your interview" : "Interview setup"}
@@ -274,7 +277,8 @@ export function PreflightPage() {
             <Card className="rounded-2xl border-slate-200 p-6 shadow-sm">
               <h2 className="m-0 text-lg font-semibold text-slate-950">Session overview</h2>
               <dl className="mt-5 space-y-4">
-                <div className="flex items-start justify-between gap-4 border-b border-slate-100 pb-4"><dt className="text-sm text-slate-500">Focus</dt><dd className="m-0 max-w-[65%] text-right text-sm font-medium capitalize text-slate-900">{focusLabel}</dd></div>
+                {fieldLabel && <div className="flex items-start justify-between gap-4 border-b border-slate-100 pb-4"><dt className="text-sm text-slate-500">Field</dt><dd className="m-0 max-w-[65%] text-right text-sm font-medium text-slate-900">{fieldLabel}</dd></div>}
+                <div className="flex items-start justify-between gap-4 border-b border-slate-100 pb-4"><dt className="text-sm text-slate-500">Focus</dt><dd className="m-0 max-w-[65%] text-right text-sm font-medium text-slate-900">{focusLabel}</dd></div>
                 <div className="flex items-center justify-between gap-4 border-b border-slate-100 pb-4"><dt className="text-sm text-slate-500">Format</dt><dd className="m-0 text-sm font-medium text-slate-900">{configuration.video_enabled ? "Audio + video" : "Audio only"}</dd></div>
                 <div className="flex items-center justify-between gap-4"><dt className="text-sm text-slate-500">Language</dt><dd className="m-0 text-sm font-medium text-slate-900">English</dd></div>
               </dl>

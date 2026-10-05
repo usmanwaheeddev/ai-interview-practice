@@ -1,3 +1,4 @@
+import asyncio
 import uuid
 
 from sqlalchemy import select
@@ -7,7 +8,6 @@ from app.core.logging import get_logger
 from app.db.models import MockInterview, MockInterviewState, ParseStatus, Resume
 from app.db.session import async_session_factory
 from app.providers.llm import get_llm_provider
-from app.services.interview.memory import load_user_memory
 from app.services.interview.plan import generate_interview_plan, generate_language_interview_plan
 from app.workers.resume_jobs import parse_resume
 
@@ -24,16 +24,12 @@ async def generate_mock_plan(ctx: dict, interview_id: str) -> None:
         if interview is None or interview.state != MockInterviewState.PREPARING:
             return
         try:
-            memory_context = await load_user_memory(
-                db, interview.user_id, exclude_interview_id=interview.id
-            )
             if interview.language is not None:
                 plan = await generate_language_interview_plan(
                     interview=interview,
                     llm=get_llm_provider(),
                     provider_name=get_settings().llm_provider,
                     spoken_language="en",
-                    memory_context=memory_context,
                 )
             else:
                 resume = await db.get(Resume, interview.resume_id)
@@ -50,12 +46,17 @@ async def generate_mock_plan(ctx: dict, interview_id: str) -> None:
                     llm=get_llm_provider(),
                     provider_name=get_settings().llm_provider,
                     spoken_language="en",
-                    memory_context=memory_context,
                 )
             interview.interview_plan = plan.model_dump(mode="json")
             interview.state = MockInterviewState.READY
             interview.failure_reason = None
             logger.info("mock_plan.created", interview_id=interview_id, fallback=plan.fallback_used)
+        except asyncio.CancelledError:
+            logger.exception("mock_plan.cancelled", interview_id=interview_id)
+            interview.state = MockInterviewState.FAILED
+            interview.failure_reason = "Interview preparation timed out. Please retry."
+            await db.commit()
+            raise
         except Exception as exc:
             logger.exception("mock_plan.failed", interview_id=interview_id)
             interview.state = MockInterviewState.FAILED

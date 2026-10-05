@@ -8,14 +8,21 @@ export interface Resume {
   parsed_at: string | null;
   created_at: string;
 }
-export type PracticeTopic = "all_areas" | "system_design" | "programming" | "problem_solving" | "behavioral" | "database" | "architecture";
+export type PracticeField = "computer_science" | "physics" | "mathematics" | "business";
+export type PracticeTopic =
+  | "system_design" | "programming" | "problem_solving" | "behavioral" | "database" | "architecture"
+  | "mechanics" | "electromagnetism" | "thermodynamics" | "quantum_physics" | "optics" | "relativity"
+  | "algebra" | "calculus" | "probability_statistics" | "discrete_mathematics" | "linear_algebra" | "numerical_methods"
+  | "strategy" | "finance" | "marketing" | "operations" | "leadership" | "economics";
+export type PracticeAreaSelection = PracticeTopic | "all_areas";
 export type InterviewLanguage = "python" | "java" | "csharp";
 export type InterviewLevel = "basic" | "advanced" | "practical";
 export type SpokenLanguage = "en" | "hi" | "ur";
 export interface InterviewDraft {
   resume_id: string | null;
+  field_type: PracticeField | null;
   job_description: string | null;
-  topics: PracticeTopic[] | null;
+  topics: PracticeAreaSelection[] | null;
   language: InterviewLanguage | null;
   level: InterviewLevel | null;
   duration_minutes: 15 | 30;
@@ -25,6 +32,7 @@ export type InterviewState = "preparing" | "ready" | "in_progress" | "disconnect
 export interface MockInterview {
   id: string;
   resume_id: string | null;
+  field_type: PracticeField | null;
   topics: PracticeTopic[];
   language: InterviewLanguage | null;
   level: InterviewLevel | null;

@@ -51,6 +51,7 @@ async def main() -> None:
             "/mock-interviews",
             json={
                 "resume_id": result.json()["id"],
+                "field_type": "computer_science",
                 "duration_minutes": 15,
                 "video_enabled": False,
                 "topics": ["system_design", "programming"],

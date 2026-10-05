@@ -1,3 +1,4 @@
+import asyncio
 import uuid
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime
@@ -45,6 +46,7 @@ async def resume_for(db, user_id):
 def body(resume_id, duration=15):
     return dict(
         resume_id=str(resume_id),
+        field_type="computer_science",
         job_description="Backend role building reliable Python APIs and distributed services.",
         topics=["system_design", "programming"],
         duration_minutes=duration,
@@ -310,12 +312,54 @@ async def test_resume_interview_allows_missing_job_description(client, db_sessio
     resume = await resume_for(db_session, uid)
     payload = {
         "resume_id": str(resume.id),
+        "field_type": "computer_science",
         "topics": ["programming"],
         "duration_minutes": 15,
         "video_enabled": False,
     }
     response = await client.post("/api/mock-interviews", json=payload)
     assert response.status_code == 201, response.text
+
+
+async def test_all_areas_expands_for_selected_field(client, db_session):
+    uid = await registered(client, "physics@example.com")
+    resume = await resume_for(db_session, uid)
+    payload = {
+        "resume_id": str(resume.id),
+        "field_type": "physics",
+        "topics": ["all_areas"],
+        "duration_minutes": 15,
+        "video_enabled": False,
+    }
+
+    response = await client.post("/api/mock-interviews", json=payload)
+
+    assert response.status_code == 201, response.text
+    assert response.json()["field_type"] == "physics"
+    assert response.json()["topics"] == [
+        "mechanics",
+        "electromagnetism",
+        "thermodynamics",
+        "quantum_physics",
+        "optics",
+        "relativity",
+    ]
+
+
+async def test_area_must_belong_to_selected_field(client, db_session):
+    uid = await registered(client, "invalid-field@example.com")
+    resume = await resume_for(db_session, uid)
+    payload = {
+        "resume_id": str(resume.id),
+        "field_type": "physics",
+        "topics": ["database"],
+        "duration_minutes": 15,
+        "video_enabled": False,
+    }
+
+    response = await client.post("/api/mock-interviews", json=payload)
+
+    assert response.status_code == 422
 
 
 async def test_failed_scoring_is_visible_and_retryable(client, db_session, monkeypatch):
@@ -326,6 +370,7 @@ async def test_failed_scoring_is_visible_and_retryable(client, db_session, monke
     interview = MockInterview(
         user_id=uid,
         resume_id=resume.id,
+        field_type="computer_science",
         job_description="Backend",
         topics=["programming"],
         duration_minutes=15,
@@ -371,6 +416,37 @@ async def test_queue_outage_does_not_leave_infinite_preparation(
     retry = await client.post(f"/api/mock-interviews/{result.json()['id']}/retry")
     assert retry.json()["state"] == "failed"
     assert retry.json()["failure_reason"]
+
+
+async def test_cancelled_plan_does_not_leave_infinite_preparation(
+    client, db_session, monkeypatch
+):
+    from app.workers import interview_jobs
+
+    uid = await registered(client)
+    resume = await resume_for(db_session, uid)
+    interview = MockInterview(
+        user_id=uid,
+        resume_id=resume.id,
+        field_type="computer_science",
+        topics=["programming"],
+        duration_minutes=15,
+    )
+    db_session.add(interview)
+    await db_session.commit()
+
+    async def cancelled(**kwargs):
+        raise asyncio.CancelledError
+
+    monkeypatch.setattr(interview_jobs, "async_session_factory", factory(db_session))
+    monkeypatch.setattr(interview_jobs, "generate_interview_plan", cancelled)
+
+    with pytest.raises(asyncio.CancelledError):
+        await interview_jobs.generate_mock_plan({}, str(interview.id))
+
+    await db_session.refresh(interview)
+    assert interview.state == MockInterviewState.FAILED
+    assert interview.failure_reason == "Interview preparation timed out. Please retry."
 
 
 @pytest.mark.parametrize("video_enabled,kind", [(False, "audio"), (True, "video")])

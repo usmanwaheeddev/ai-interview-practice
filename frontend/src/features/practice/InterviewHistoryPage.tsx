@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { PageShell } from "../../components/ui/PageShell";
 import { apiRequest } from "../../lib/api";
 import type { InterviewState, MockInterview } from "../../lib/types";
+import {areaLabel, INTERVIEW_FIELDS} from "../../lib/interviewFields";
 
 const completedStates: InterviewState[] = ["completed", "scoring", "scored"];
 
@@ -22,7 +23,10 @@ function humanize(value: string) {
 }
 
 function interviewTitle(interview: MockInterview) {
-  if (interview.topics.length) return interview.topics.map(humanize).join(", ");
+  if (interview.topics.length) {
+    const areas = interview.topics.map(areaLabel).join(", ");
+    return interview.field_type ? `${INTERVIEW_FIELDS[interview.field_type].label} · ${areas}` : areas;
+  }
   return `${interview.language ? humanize(interview.language) : "Language"} · ${interview.level ? humanize(interview.level) : "Practice"}`;
 }
 

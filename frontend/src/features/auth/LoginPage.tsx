@@ -5,11 +5,12 @@ import { useAuth, type CurrentUser } from "../../lib/auth";
 import { Alert } from "../../components/ui/Alert";
 import { Button } from "../../components/ui/Button";
 import { Field, Input } from "../../components/ui/Field";
+import {PasswordInput} from "../../components/ui/PasswordInput";
 import { PublicShell } from "../../components/ui/PageShell";
 
 export function LoginPage() {
-  const [email, setEmail] = useState("candidate@example.com");
-  const [password, setPassword] = useState("devpassword123");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const { refetch } = useAuth();
@@ -47,8 +48,7 @@ export function LoginPage() {
           />
         </Field>
         <Field label="Password">
-          <Input
-            type="password"
+          <PasswordInput
             required
             value={password}
             onChange={(e) => setPassword(e.target.value)}

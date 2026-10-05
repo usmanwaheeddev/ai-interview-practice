@@ -4,6 +4,9 @@ from app.core.config import get_settings
 from app.providers.llm.base import LLMProvider
 from app.providers.llm.fake import FakeLLMProvider
 
+DEEPSEEK_JSON_TIMEOUT_S = 45.0
+OLLAMA_JSON_TIMEOUT_S = 120.0
+
 
 @lru_cache
 def get_llm_provider() -> LLMProvider:
@@ -25,8 +28,8 @@ def get_llm_provider() -> LLMProvider:
             fallback=OllamaLLMProvider(settings),
             primary_name="deepseek",
             fallback_name="ollama",
-            primary_json_timeout_s=530.0,
-            fallback_json_timeout_s=150.0,
+            primary_json_timeout_s=DEEPSEEK_JSON_TIMEOUT_S,
+            fallback_json_timeout_s=OLLAMA_JSON_TIMEOUT_S,
         )
 
     if settings.llm_provider == "ollama":

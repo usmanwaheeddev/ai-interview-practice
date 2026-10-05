@@ -32,7 +32,6 @@ from app.providers.stt import get_stt_provider
 from app.providers.tts import get_tts_provider
 from app.services.interview.director import Director
 from app.services.interview.engine import InterviewEngine, TurnKind
-from app.services.interview.memory import load_user_memory
 from app.services.interview.plan import InterviewPlan
 from app.services.interview.state_store import load_state, save_state
 from app.services.interview.streaming_stt import is_plausible_transcript, merge_transcript_text
@@ -138,16 +137,12 @@ async def interview_ws(
         resume.parsed if resume and isinstance(resume.parsed, dict) else {},
         interview.job_description or "",
     )
-    memory_context = await load_user_memory(
-        db, interview.user_id, exclude_interview_id=interview.id
-    )
     engine = InterviewEngine(
         InterviewPlan.model_validate(interview.interview_plan),
         Director(
             get_llm_provider(),
             provider_name=get_settings().llm_provider,
             spoken_language="en",
-            memory_context=memory_context,
         ),
         state=await load_state(redis, interview.id),
         spoken_language="en",
