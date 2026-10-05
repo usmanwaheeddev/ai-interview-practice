@@ -8,6 +8,10 @@ import { Field, Input } from "../../components/ui/Field";
 import {PasswordInput} from "../../components/ui/PasswordInput";
 import { PublicShell } from "../../components/ui/PageShell";
 
+function isGmailAddress(value: string) {
+  return value.trim().toLowerCase().endsWith("@gmail.com");
+}
+
 export function RegisterCandidatePage() {
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
@@ -20,6 +24,10 @@ export function RegisterCandidatePage() {
   const onSubmit = async (e: FormEvent) => {
     e.preventDefault();
     setError(null);
+    if (!isGmailAddress(email)) {
+      setError("Please use a Gmail address.");
+      return;
+    }
     setSubmitting(true);
     try {
       await apiRequest("/auth/register", {
@@ -44,6 +52,7 @@ export function RegisterCandidatePage() {
         <Field label="Email">
           <Input
             type="email"
+            autoComplete="username"
             required
             value={email}
             onChange={(e) => setEmail(e.target.value)}
@@ -51,6 +60,7 @@ export function RegisterCandidatePage() {
         </Field>
         <Field label="Password">
           <PasswordInput
+            autoComplete="new-password"
             required
             minLength={8}
             value={password}
