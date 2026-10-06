@@ -20,6 +20,9 @@ class FakeStorageProvider:
     async def get_object(self, key: str) -> bytes:
         return self._objects[key][0]
 
+    async def object_exists(self, key: str) -> bool:
+        return key in self._objects
+
     async def delete_object(self, key: str) -> None:
         self._objects.pop(key, None)
 

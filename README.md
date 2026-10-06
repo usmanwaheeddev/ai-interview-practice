@@ -137,7 +137,13 @@ New and existing recordings are combined into one report player after upload. To
 make reprocess-recordings
 ```
 
-The command keeps the original chunks and prints any recordings that cannot be remuxed.
+If older uploads were stored but never marked ready, first run:
+
+```bash
+make repair-recordings
+```
+
+This verifies every chunk exists in object storage and that chunk indexes are contiguous before marking an interview ready and combining it. It keeps original chunks and reports incomplete recordings without changing them.
 
 ## Architecture and capabilities
 

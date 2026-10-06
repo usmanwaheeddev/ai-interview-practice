@@ -1,4 +1,4 @@
-.PHONY: up up-backend down migrate migration seed test test-backend test-frontend lint lint-backend lint-frontend verify interview-cli interview-sim ollama-pull logs backup restore-rehearsal reprocess-recordings
+.PHONY: up up-backend down migrate migration seed test test-backend test-frontend lint lint-backend lint-frontend verify interview-cli interview-sim ollama-pull logs backup restore-rehearsal reprocess-recordings repair-recordings
 
 up:
 	@test -f .env || cp .env.example .env
@@ -23,6 +23,9 @@ migrate:
 
 reprocess-recordings:
 	docker compose exec worker python -m app.cli.reprocess_recordings
+
+repair-recordings:
+	docker compose exec worker python -m app.cli.reprocess_recordings --repair-ready
 
 migration:
 	docker compose exec api alembic revision --autogenerate -m "$(m)"

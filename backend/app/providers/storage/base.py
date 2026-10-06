@@ -11,6 +11,8 @@ class StorageProvider(Protocol):
 
     async def get_object(self, key: str) -> bytes: ...
 
+    async def object_exists(self, key: str) -> bool: ...
+
     async def delete_object(self, key: str) -> None:
         """GDPR erasure / retention (Phase 6) — best-effort: callers should
         tolerate a missing key (already gone) rather than treat it as an

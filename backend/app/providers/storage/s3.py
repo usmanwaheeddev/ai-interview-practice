@@ -68,6 +68,13 @@ class S3StorageProvider:
         response = await self._run(self._client.get_object, Bucket=self._bucket, Key=key)
         return response["Body"].read()  # type: ignore[no-any-return]
 
+    async def object_exists(self, key: str) -> bool:
+        try:
+            await self._run(self._client.head_object, Bucket=self._bucket, Key=key)
+        except ClientError:
+            return False
+        return True
+
     async def delete_object(self, key: str) -> None:
         # S3's delete_object is a no-op (not an error) for a missing key —
         # exactly the "tolerate already-gone" behavior callers want.
