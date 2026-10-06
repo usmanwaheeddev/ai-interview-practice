@@ -2,7 +2,7 @@
 
 import asyncio
 
-from sqlalchemy import distinct, select
+from sqlalchemy import func, select
 
 from app.db.models import MockMediaAsset
 from app.db.session import async_session_factory
@@ -14,15 +14,23 @@ async def main() -> None:
     if not ffmpeg_available():
         raise RuntimeError("ffmpeg is required to reprocess recordings")
     async with async_session_factory() as db:
+        total_assets = await db.scalar(select(func.count()).select_from(MockMediaAsset))
         interview_ids = list(
             (
                 await db.scalars(
-                    select(distinct(MockMediaAsset.interview_id)).where(
+                    select(MockMediaAsset.interview_id)
+                    .where(
                         MockMediaAsset.ready.is_(True),
                         MockMediaAsset.chunk_index >= 0,
                     )
+                    .distinct()
                 )
             ).all()
+        )
+        print(
+            f"Found {len(interview_ids)} interview(s) with ready recording chunks "
+            f"out of {total_assets or 0} stored media asset(s).",
+            flush=True,
         )
         completed = failed = 0
         for interview_id in interview_ids:
