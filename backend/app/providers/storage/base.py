@@ -1,3 +1,4 @@
+from pathlib import Path
 from typing import Protocol
 
 
@@ -5,6 +6,8 @@ class StorageProvider(Protocol):
     """See architecture.md §7 — no vendor SDK outside app/providers/."""
 
     async def put_object(self, key: str, data: bytes, *, content_type: str) -> None: ...
+
+    async def put_file(self, key: str, path: Path, *, content_type: str) -> None: ...
 
     async def get_object(self, key: str) -> bytes: ...
 

@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { apiRequest, ApiError } from "../../lib/api";
 import type { MockInterview } from "../../lib/types";
-import { AudioPlaybackQueue, startMicCapture, type MicCapture } from "./audio";
+import { AudioPlaybackQueue, startMicCapture, type MicCapture, WavSegmentRecorder } from "./audio";
 import { ChunkedMediaUploader } from "./mediaUpload";
 import { InterviewSocket } from "./wsClient";
 import { StatusPill } from "../../components/ui/StatusPill";
@@ -49,14 +49,17 @@ export function InterviewRoomPage() {
   const [endingInterview, setEndingInterview] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [activeLlm, setActiveLlm] = useState<"deepseek" | "ollama" | null>(null);
+  const [cameraEnabled, setCameraEnabled] = useState(false);
 
   const socketRef = useRef<InterviewSocket | null>(null);
   const playbackRef = useRef<AudioPlaybackQueue | null>(null);
   const micCaptureRef = useRef<MicCapture | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const recorderRef = useRef<MediaRecorder | null>(null);
+  const wavRecorderRef = useRef<WavSegmentRecorder | null>(null);
   const uploaderRef = useRef<ChunkedMediaUploader | null>(null);
   const transcriptScrollRef = useRef<HTMLElement | null>(null);
+  const cameraPreviewRef = useRef<HTMLVideoElement | null>(null);
   // Server-authoritative "is it currently the interviewer's turn" — set
   // directly from agent.speaking_start/end (not React state, so the mic
   // capture closure below always sees the latest value with no render lag).
@@ -104,18 +107,20 @@ export function InterviewRoomPage() {
         return;
       }
       streamRef.current = stream;
+      setCameraEnabled(session.video_enabled);
 
-      // Store a private recording for the candidate's own report. Audio-only
-      // practice never asks for or records a camera stream.
+      // Store a private recording for the candidate's own report. Audio
+      // sessions use WAV so each segment has a duration and plays on its own;
+      // video continues to use browser-native WebM capture.
       uploaderRef.current = new ChunkedMediaUploader(session.id, session.video_enabled ? "video" : "audio");
-      const recorder = new MediaRecorder(stream, {
-        mimeType: session.video_enabled ? "video/webm" : "audio/webm",
-      });
-      recorder.ondataavailable = (event) => {
-        if (event.data.size > 0) uploaderRef.current?.uploadChunk(event.data);
-      };
-      recorder.start(10_000); // 10s timeslices — chunked, not one giant blob
-      recorderRef.current = recorder;
+      if (session.video_enabled) {
+        const recorder = new MediaRecorder(stream, { mimeType: "video/webm" });
+        recorder.ondataavailable = (event) => {
+          if (event.data.size > 0) uploaderRef.current?.uploadChunk(event.data);
+        };
+        recorder.start(10_000); // 10s timeslices — chunked, not one giant blob
+        recorderRef.current = recorder;
+      }
 
 
       const socket = new InterviewSocket(session.id, {
@@ -184,6 +189,7 @@ export function InterviewRoomPage() {
           if (recording && recording.state !== "inactive") {
             await new Promise<void>(resolve => { recording.addEventListener("stop", () => resolve(), {once:true}); recording.stop(); });
           }
+          wavRecorderRef.current?.flush();
           streamRef.current?.getTracks().forEach(t => t.stop());
           try { await uploaderRef.current?.complete(); } catch { /* Report remains available if recording upload fails. */ }
           navigate(`/mock-interviews/${interviewId}/report`);
@@ -206,6 +212,7 @@ export function InterviewRoomPage() {
       const micCapture = startMicCapture(
         stream,
         (pcm) => {
+          wavRecorderRef.current?.push(pcm);
           if (
             !interviewerTurnRef.current &&
             !agentPlaybackRef.current &&
@@ -226,6 +233,11 @@ export function InterviewRoomPage() {
         },
       );
       micCaptureRef.current = micCapture;
+      if (!session.video_enabled) {
+        wavRecorderRef.current = new WavSegmentRecorder(micCapture.sampleRate, (blob) => {
+          uploaderRef.current?.uploadChunk(blob);
+        });
+      }
       // Browsers may reject the requested 16 kHz AudioContext and fall back
       // to the device rate (commonly 48 kHz). Tell the server the rate that
       // is actually being sent so VAD timing and Whisper input stay correct.
@@ -244,11 +256,18 @@ export function InterviewRoomPage() {
       cancelled = true;
       socketRef.current?.close();
       micCaptureRef.current?.stop();
+      wavRecorderRef.current?.flush();
       if (recorderRef.current?.state !== "inactive") recorderRef.current?.stop();
       streamRef.current?.getTracks().forEach((t) => t.stop());
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps -- one-time setup by design
   }, [interviewId]);
+
+  useEffect(() => {
+    if (cameraEnabled && cameraPreviewRef.current && streamRef.current) {
+      cameraPreviewRef.current.srcObject = streamRef.current;
+    }
+  }, [cameraEnabled]);
 
   // Kept in a ref (not state) so the mic-capture closure above always reads
   // the latest value without needing to be torn down and rebuilt every time
@@ -279,6 +298,7 @@ export function InterviewRoomPage() {
     playbackRef.current?.stop();
     micCaptureRef.current?.stop();
     micCaptureRef.current = null;
+    wavRecorderRef.current?.flush();
     if (recorderRef.current && recorderRef.current.state !== "inactive") {
       recorderRef.current.stop();
     }
@@ -363,6 +383,13 @@ export function InterviewRoomPage() {
           </div>
         </div>
       </div>
+
+      {cameraEnabled && (
+        <section className="overflow-hidden rounded-xl border border-slate-200 bg-slate-950" aria-label="Your live camera preview">
+          <video ref={cameraPreviewRef} className="aspect-video w-full object-cover" autoPlay muted playsInline />
+          <p className="m-0 bg-slate-900 px-3 py-2 text-xs text-slate-300">Your camera recording is active and will appear in your report.</p>
+        </section>
+      )}
 
       {processing && !agentSpeaking && (
         <div className="flex items-center gap-2 text-sm text-ink-500">

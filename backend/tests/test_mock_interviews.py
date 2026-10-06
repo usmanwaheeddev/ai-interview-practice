@@ -12,6 +12,7 @@ from app.db.models import (
     MockInterview,
     MockInterviewState,
     MockInterviewTurn,
+    MockMediaAsset,
     Resume,
 )
 from app.providers.llm.fake import FakeLLMProvider
@@ -450,7 +451,9 @@ async def test_cancelled_plan_does_not_leave_infinite_preparation(
 
 
 @pytest.mark.parametrize("video_enabled,kind", [(False, "audio"), (True, "video")])
-async def test_recordings_require_consent_and_match_mode(client, db_session, video_enabled, kind):
+async def test_recordings_require_consent_and_match_mode(
+    client, db_session, fake_queue, video_enabled, kind
+):
     uid = await registered(client)
     resume = await resume_for(db_session, uid)
     request = body(resume.id, 30)
@@ -474,3 +477,19 @@ async def test_recordings_require_consent_and_match_mode(client, db_session, vid
     recordings = (await client.get(path + "/report")).json()["recordings"]
     assert len(recordings) == 1
     assert recordings[0]["kind"] == kind
+    assert fake_queue.enqueued[-1] == ("combine_mock_recording", (iid,))
+
+    db_session.add(
+        MockMediaAsset(
+            interview_id=uuid.UUID(iid),
+            kind=kind,
+            chunk_index=-1,
+            storage_key=f"mock-interviews/{iid}/{kind}/recording.webm",
+            content_type=f"{kind}/webm",
+            ready=True,
+        )
+    )
+    await db_session.commit()
+    master_recording = (await client.get(path + "/report")).json()["recordings"]
+    assert len(master_recording) == 1
+    assert "/recording.webm" in master_recording[0]["url"]

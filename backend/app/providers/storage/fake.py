@@ -1,3 +1,7 @@
+import asyncio
+from pathlib import Path
+
+
 class FakeStorageProvider:
     """In-memory — used by tests. See skills.md `generate-synthetic-candidate`
     and plan.md §3.7 on why tests never hit real infrastructure."""
@@ -7,6 +11,11 @@ class FakeStorageProvider:
 
     async def put_object(self, key: str, data: bytes, *, content_type: str) -> None:
         self._objects[key] = (data, content_type)
+
+    async def put_file(self, key: str, path: Path, *, content_type: str) -> None:
+        await self.put_object(
+            key, await asyncio.to_thread(path.read_bytes), content_type=content_type
+        )
 
     async def get_object(self, key: str) -> bytes:
         return self._objects[key][0]

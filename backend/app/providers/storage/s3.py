@@ -1,5 +1,6 @@
 import asyncio
 from functools import partial
+from pathlib import Path
 
 import boto3
 from botocore.client import Config as BotoConfig
@@ -52,6 +53,15 @@ class S3StorageProvider:
             Key=key,
             Body=data,
             ContentType=content_type,
+        )
+
+    async def put_file(self, key: str, path: Path, *, content_type: str) -> None:
+        await self._run(
+            self._client.upload_file,
+            str(path),
+            self._bucket,
+            key,
+            ExtraArgs={"ContentType": content_type},
         )
 
     async def get_object(self, key: str) -> bytes:

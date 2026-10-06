@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { float32ToPCM16, rms } from "./audio";
+import { float32ToPCM16, rms, WavSegmentRecorder } from "./audio";
 
 describe("float32ToPCM16", () => {
   it("converts silence to zeros", () => {
@@ -54,5 +54,19 @@ describe("rms", () => {
     const quiet = rms(new Float32Array([0.1, -0.1, 0.1, -0.1]));
     const loud = rms(new Float32Array([0.5, -0.5, 0.5, -0.5]));
     expect(loud).toBeGreaterThan(quiet);
+  });
+});
+
+describe("WavSegmentRecorder", () => {
+  it("creates a standalone WAV file with a header and PCM payload", () => {
+    const segments: Blob[] = [];
+    const recorder = new WavSegmentRecorder(16_000, (segment) => segments.push(segment));
+
+    recorder.push(new Int16Array([100, -100, 200]).buffer);
+    recorder.flush();
+
+    expect(segments).toHaveLength(1);
+    expect(segments[0].type).toBe("audio/wav");
+    expect(segments[0].size).toBe(44 + 6);
   });
 });

@@ -33,6 +33,67 @@ export interface MicCapture {
 }
 
 /**
+ * Buffers microphone PCM into independently playable WAV segments. MediaRecorder
+ * WebM timeslices are streaming fragments, so browsers often show their duration
+ * as 00:00 when each fragment is opened on its own in a report.
+ */
+export class WavSegmentRecorder {
+  private chunks: Int16Array[] = [];
+  private byteLength = 0;
+  private readonly segmentByteLength: number;
+
+  constructor(
+    private readonly sampleRate: number,
+    private readonly onSegment: (blob: Blob) => void,
+    segmentDurationSeconds = 10,
+  ) {
+    this.segmentByteLength = sampleRate * 2 * segmentDurationSeconds;
+  }
+
+  push(pcm: ArrayBuffer): void {
+    this.chunks.push(new Int16Array(pcm.slice(0)));
+    this.byteLength += pcm.byteLength;
+    if (this.byteLength >= this.segmentByteLength) this.flush();
+  }
+
+  flush(): void {
+    if (!this.byteLength) return;
+    const samples = new Int16Array(this.byteLength / 2);
+    let offset = 0;
+    for (const chunk of this.chunks) {
+      samples.set(chunk, offset);
+      offset += chunk.length;
+    }
+    const wav = new ArrayBuffer(44 + samples.byteLength);
+    const view = new DataView(wav);
+    writeWavHeader(view, this.sampleRate, samples.byteLength);
+    new Int16Array(wav, 44, samples.length).set(samples);
+    this.onSegment(new Blob([wav], { type: "audio/wav" }));
+    this.chunks = [];
+    this.byteLength = 0;
+  }
+}
+
+function writeWavHeader(view: DataView, sampleRate: number, dataLength: number): void {
+  const writeText = (offset: number, value: string) => {
+    for (let index = 0; index < value.length; index++) view.setUint8(offset + index, value.charCodeAt(index));
+  };
+  writeText(0, "RIFF");
+  view.setUint32(4, 36 + dataLength, true);
+  writeText(8, "WAVE");
+  writeText(12, "fmt ");
+  view.setUint32(16, 16, true);
+  view.setUint16(20, 1, true);
+  view.setUint16(22, 1, true);
+  view.setUint32(24, sampleRate, true);
+  view.setUint32(28, sampleRate * 2, true);
+  view.setUint16(32, 2, true);
+  view.setUint16(34, 16, true);
+  writeText(36, "data");
+  view.setUint32(40, dataLength, true);
+}
+
+/**
  * `onChunk` fires ~every BUFFER_SIZE samples with raw PCM16 bytes.
  * `onLevel` fires with each chunk's RMS (0-1ish) — for a level meter, should
  * one get built later.

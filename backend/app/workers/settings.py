@@ -3,6 +3,7 @@ from arq.connections import RedisSettings
 from app.core.config import get_settings
 from app.core.logging import configure_logging
 from app.workers.interview_jobs import generate_mock_plan
+from app.workers.recording_jobs import combine_mock_recording
 from app.workers.resume_jobs import parse_resume
 from app.workers.scoring_jobs import score_mock_interview
 
@@ -15,6 +16,12 @@ async def ping(ctx: dict) -> str:
 
 
 class WorkerSettings:
-    functions = [ping, parse_resume, generate_mock_plan, score_mock_interview]
+    functions = [
+        ping,
+        parse_resume,
+        generate_mock_plan,
+        score_mock_interview,
+        combine_mock_recording,
+    ]
     redis_settings = RedisSettings.from_dsn(settings.redis_url)
     job_timeout = 300

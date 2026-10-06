@@ -191,11 +191,19 @@ async def report(interview: MockInterview = Depends(owned), db: AsyncSession = D
         .where(MockInterviewTurn.interview_id == interview.id)
         .order_by(MockInterviewTurn.turn_index)
     )
-    media = await db.scalars(
-        select(MockMediaAsset)
-        .where(MockMediaAsset.interview_id == interview.id, MockMediaAsset.ready.is_(True))
-        .order_by(MockMediaAsset.chunk_index)
+    ready_media = list(
+        (
+            await db.scalars(
+                select(MockMediaAsset)
+                .where(MockMediaAsset.interview_id == interview.id, MockMediaAsset.ready.is_(True))
+                .order_by(MockMediaAsset.chunk_index)
+            )
+        ).all()
     )
+    # Master assets use a negative index. Keep the raw chunks until retention
+    # removes them, but prefer the remuxed recording for report playback.
+    masters = [asset for asset in ready_media if asset.chunk_index < 0]
+    media = masters[-1:] if masters else [asset for asset in ready_media if asset.chunk_index >= 0]
     storage = get_storage_provider()
     return dict(
         state=interview.state,
@@ -241,11 +249,12 @@ async def upload_media(
         )
     )
     if asset is None:
+        extension = "wav" if body.content_type == "audio/wav" else "webm"
         asset = MockMediaAsset(
             interview_id=interview.id,
             kind=body.kind,
             chunk_index=body.chunk_index,
-            storage_key=f"mock-interviews/{interview.id}/{body.kind}/chunk-{body.chunk_index:05d}.webm",
+            storage_key=f"mock-interviews/{interview.id}/{body.kind}/chunk-{body.chunk_index:05d}.{extension}",
             content_type=body.content_type,
         )
         db.add(asset)
@@ -263,6 +272,7 @@ async def complete_media(
     body: MediaCompleteRequest,
     interview: MockInterview = Depends(owned),
     db: AsyncSession = Depends(get_db),
+    queue: ArqRedis = Depends(get_queue),
 ):
     assets = await db.scalars(
         select(MockMediaAsset).where(
@@ -273,3 +283,9 @@ async def complete_media(
     for asset in assets:
         asset.ready = True
     await db.commit()
+    try:
+        await queue.enqueue_job("combine_mock_recording", str(interview.id))
+    except Exception:
+        # Chunk playback remains available and the maintenance command can
+        # generate the master recording later.
+        pass

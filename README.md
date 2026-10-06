@@ -1,133 +1,160 @@
 # AI Interview Practice
 
-A production-oriented, self-hosted AI mock-interview platform with real-time
-voice conversations, resilient AI-provider integrations, evidence-grounded
-feedback, and privacy controls.
-Users can upload resumes, practice interviews against a job description or a
-programming-language track, and receive transcript-based feedback. This is a
-personal practice tool, not an automated hiring-decision system.
+AI Interview Practice is a self-hosted platform for realistic mock interviews. Candidates can practice by voice against a resume and job description or choose a subject and topic, review a live transcript, and receive evidence-grounded feedback. Camera recording is optional. This is a private practice tool, not an automated hiring-decision system.
 
-## Included in this release
+The application has a React and TypeScript web client, a FastAPI backend, PostgreSQL for application data, Redis and ARQ for background work, and S3-compatible storage for resumes and interview recordings. It supports local Ollama models or the DeepSeek API for interview and scoring language tasks, plus local speech-to-text and text-to-speech providers.
 
-- FastAPI API with JWT cookie authentication and user-owned resources.
-- Resume extraction, interview planning, live voice interviews over WebSocket,
-  and evidence-based scoring.
-- DeepSeek-first LLM calls with local Ollama fallback, plus local speech
-  providers and deterministic test fakes.
-- SQLAlchemy models, Alembic migrations, Redis-backed ARQ workers, and tests.
-- User data export and account erasure endpoints.
+## 1. Local setup with Ollama
 
-The repository includes the backend and React frontend, including authentication,
-interview setup, microphone preflight, live interviews, history, feedback reports,
-and privacy controls. See [architecture.md](architecture.md) for runtime
-components, data flows, domain models, and provider behavior.
-
-## Stack
-
-Python 3.12, FastAPI, SQLAlchemy, Alembic, PostgreSQL 16, Redis 7, ARQ,
-RustFS/S3, DeepSeek with local Ollama fallback, faster-whisper or whisper.cpp,
-and Piper/espeak-ng. The frontend uses React 18, TypeScript, Vite,
-Tailwind CSS, React Query, and React Router.
-
-## Quick start
-
-Install Docker and Docker Compose. Allow sufficient memory and disk for local
-speech and language models; downloads can make the first startup slow.
+Run PostgreSQL, Redis, and RustFS in Docker while running the API, worker, Ollama, and web app locally. Requirements: Python 3.12, Node.js 22.12+, Docker Compose, and [Ollama](https://ollama.com/download).
 
 ```bash
 git clone https://github.com/uwaheed88/ai-interview-practice.git
 cd ai-interview-practice
 cp .env.example .env
-# Review .env and replace development credentials before deployment.
+ollama pull llama3.2:3b
+```
+
+In `.env`, configure local model use and service addresses:
+
+```dotenv
+LLM_PROVIDER=ollama
+OLLAMA_URL=http://localhost:11434
+OLLAMA_MODEL=llama3.2:3b
+DATABASE_URL=postgresql+asyncpg://hiring:hiring@localhost:5432/hiring
+REDIS_URL=redis://localhost:6379/0
+S3_ENDPOINT_URL=http://localhost:9000
+S3_PUBLIC_ENDPOINT_URL=http://localhost:9000
+```
+
+Start the data services, install the backend, migrate the database, then run the API:
+
+```bash
+docker compose up -d postgres redis rustfs
+cd backend
+python3.12 -m venv .venv
+source .venv/bin/activate
+pip install -e .
+set -a; source ../.env; set +a
+alembic upgrade head
+uvicorn app.main:app --reload --port 8005
+```
+
+In a second terminal, run the worker:
+
+```bash
+cd backend
+source .venv/bin/activate
+set -a; source ../.env; set +a
+arq app.workers.settings.WorkerSettings
+```
+
+In a third terminal, run the frontend:
+
+```bash
+cd frontend
+npm ci
+VITE_PROXY_TARGET=http://127.0.0.1:8005 npm run dev
+```
+
+Open <http://localhost:5173>. Speech models download on first use. Set `STT_PROVIDER=fake` and `TTS_PROVIDER=fake` in `.env` only for development without local speech models.
+
+## 2. Local setup with an API key
+
+Use the same local services and application commands as part 1, with DeepSeek as the primary language model. Ollama provides an optional local fallback.
+
+In `.env`, set:
+
+```dotenv
+LLM_PROVIDER=deepseek
+DEEPSEEK_API_KEY=your-deepseek-api-key
+DEEPSEEK_MODEL=deepseek-flash
+OLLAMA_URL=http://localhost:11434
+OLLAMA_MODEL=llama3.2:3b
+```
+
+The backend calls DeepSeek first and falls back to Ollama if a request fails. Keep the key in `.env`, which is ignored by Git, and never put it in frontend variables. Start the data services, API, worker, and frontend using the commands in part 1.
+
+## 3. Docker setup with Ollama
+
+Docker Compose starts the web client, API, worker, PostgreSQL, Redis, RustFS, and Ollama. The default Compose setup pulls and warms the configured Ollama model. It defaults to DeepSeek with Ollama fallback; set `LLM_PROVIDER=ollama` to use only the local model.
+
+```bash
+git clone https://github.com/uwaheed88/ai-interview-practice.git
+cd ai-interview-practice
+cp .env.example .env
+```
+
+Set the model provider in `.env`:
+
+```dotenv
+LLM_PROVIDER=ollama
+OLLAMA_MODEL=llama3.2:3b
+```
+
+Start the application and apply migrations:
+
+```bash
 make up
 make migrate
 ```
 
-`make up` starts the API, worker, PostgreSQL, Redis, RustFS, Ollama (including a
-model pull/warm-up job), and the web application. `make up-backend` starts the
-same backend stack without the frontend profile.
+The first run downloads the Ollama model and speech models, so startup and the first interview may take longer. Visit <http://localhost:5173>. API docs are at <http://localhost:8005/docs> and readiness at <http://localhost:8005/api/ready>. Allow enough memory and disk for the models.
 
-- Web app: http://localhost:5173
-- API: http://localhost:8005
-- Swagger: http://localhost:8005/docs
-- ReDoc: http://localhost:8005/redoc
-- Liveness: http://localhost:8005/api/health
-- Readiness: http://localhost:8005/api/ready
-- Object-storage console: http://localhost:9001
+## 4. Docker setup with an API key
 
-Readiness checks access infrastructure and configured providers, and may download
-or load models on the first call. Optional `make seed` creates local practice data.
+Compose can use DeepSeek as its primary LLM and the included Ollama container as a fallback. This is the default configuration.
 
-## Configuration
+```bash
+git clone https://github.com/uwaheed88/ai-interview-practice.git
+cd ai-interview-practice
+cp .env.example .env
+```
 
-Use `.env.example` as the configuration reference. Never commit the real `.env`.
-Compose overrides database, Redis, object-storage, and Ollama addresses
-with internal service names.
+Add your API key to `.env` and choose the DeepSeek provider:
 
-- `LLM_PROVIDER`: `deepseek`, `ollama`, or `fake`. DeepSeek is primary and
-  automatically falls back to local Ollama when a request fails.
-- `STT_PROVIDER`: `faster_whisper` or `fake`; `STT_ENGINE` selects
-  `faster_whisper` or `whisper_cpp`.
-- `TTS_PROVIDER`: `piper` or `fake`.
-- `STORAGE_PROVIDER`: `s3` or `fake`.
+```dotenv
+LLM_PROVIDER=deepseek
+DEEPSEEK_API_KEY=your-deepseek-api-key
+DEEPSEEK_MODEL=deepseek-flash
+OLLAMA_MODEL=llama3.2:3b
+```
 
-For Apple Silicon acceleration with whisper.cpp, run the API on the macOS host
-and set `WHISPER_CPP_BINARY_PATH` and `WHISPER_CPP_MODEL_PATH` to your compiled
-CLI and model. Docker Desktop's Linux VM cannot access Apple Metal.
+Start the application and migrate:
 
-For Apple Silicon Ollama acceleration, run Ollama natively on macOS and set
-`OLLAMA_DOCKER_URL=http://host.docker.internal:11434`. The default Compose path
-uses the free CPU-only Ollama container.
+```bash
+make up
+make migrate
+```
 
-DeepSeek uses its official OpenAI-compatible API. Set `LLM_PROVIDER=deepseek`
-and `DEEPSEEK_API_KEY`; `DEEPSEEK_MODEL` defaults to `deepseek-flash`, with
-thinking disabled for lower live-interview latency. Failed DeepSeek requests
-fall back to the local model configured by `OLLAMA_URL` and `OLLAMA_MODEL`.
+DeepSeek handles language requests first; Ollama provides a local fallback when DeepSeek is unavailable. Keep `.env` private and do not place API keys in `VITE_*` settings. Open <http://localhost:5173> to use the application.
 
-Piper voices are downloaded lazily on first use. In Docker they persist in the
-`piper_voices` volume. Live interviews currently use English speech. When the
-API runs directly with Uvicorn,
-`PIPER_VOICES_DIR` is optional: the app chooses a writable per-user cache
-(`~/Library/Caches/ai-interview-practice/piper-voices` on macOS,
-`~/.cache/ai-interview-practice/piper-voices` on Linux, or the local app-data
-directory on Windows). Override it only when a specific location is required.
-Whisper models are also runtime downloads rather than repository files.
+### Reprocess existing recordings
 
-## Interview flow
+New and existing recordings are combined into one report player after upload. To create master files for recordings captured before this feature, run the reprocessor from the worker container after updating the application:
 
-Creating an interview in the UI first stores only a draft in browser session
-storage. No database interview or provider job is created until the candidate
-reaches device setup, grants microphone access, accepts the recording/feedback
-consent, and selects **Begin interview**. The generated interview ID is retained
-across a preflight reload so retrying does not create a duplicate session.
+```bash
+make reprocess-recordings
+```
 
-Resume interviews generate the full question bank in one structured LLM request:
-five questions for 15 minutes or ten for 30 minutes, distributed across the
-selected areas. The live engine can ask follow-ups and continues through the
-bank until the configured time threshold, so a single selected area does not
-end the interview after only one question. The opening greeting uses the logged-in
-candidate's full name.
+The command keeps the original chunks and prints any recordings that cannot be remuxed.
 
-## Engineering highlights
+## Architecture and capabilities
 
-- Deterministic interview state machine with Redis-backed reconnect recovery.
-- Streaming voice transport with bounded VAD, overlapping STT segments, partial
-  transcripts, bounded Director prompts, and sentence-sized audio chunks.
-- Provider isolation with timeouts, retries, circuit breakers, and LLM fallback.
-- Evidence validation prevents feedback from citing transcript text that was
-  never spoken.
-- Resource ownership is enforced at every API boundary; personal-data export
-  and complete erasure are first-class endpoints.
-- Background jobs are retryable and preserve user data when providers fail.
-- Separate development and production container builds, automated migrations,
-  health checks, non-root runtime, and same-origin WebSocket proxying.
+See [architecture.md](architecture.md) for runtime components, data flows, domain models, and provider behavior.
 
-## Development
+- Resume extraction, interview planning, live voice interviews over WebSocket, transcript, and evidence-based scoring.
+- Optional candidate video capture and private recording playback from the report.
+- FastAPI with JWT cookie authentication and user-owned resources.
+- DeepSeek and Ollama LLM integrations, faster-whisper or whisper.cpp speech recognition, and Piper speech synthesis.
+- SQLAlchemy, Alembic migrations, Redis-backed ARQ workers, S3-compatible storage, account export, and erasure endpoints.
+
+## Development commands
 
 ```bash
 make test          # Backend pytest suite; contract tests excluded by default.
 make lint          # Backend Ruff and mypy checks.
-make test-frontend # Frontend Vitest suite; start the frontend profile first.
+make test-frontend # Frontend Vitest suite.
 make lint-frontend # Frontend ESLint and TypeScript checks.
 make verify        # Complete pre-push quality gate.
 make logs
@@ -136,68 +163,23 @@ make migrate
 make down
 ```
 
-To run tests without Docker:
+To run backend tests without Docker:
 
 ```bash
 cd backend
 python3.12 -m venv .venv
 source .venv/bin/activate
-pip install -e ".[dev]"
+pip install -e "[dev]"
 pytest
 ```
 
-To run the API and worker directly while keeping the data services in Docker:
+For frontend development without Docker, follow the frontend commands in part 1. The Vite server proxies `/api` and `/ws` to `VITE_PROXY_TARGET`; frontend variables must not contain secrets.
 
-```bash
-make up-backend
-docker compose stop api worker
-cd backend
-source .venv/bin/activate
-set -a; source ../.env; set +a
-alembic upgrade head
-uvicorn app.main:app --reload --port 8005
-# In a second activated terminal, load ../.env the same way:
-arq app.workers.settings.WorkerSettings
-```
+Contract tests use real infrastructure and are opt-in with `pytest -m contract`. `make interview-sim` creates synthetic data and uses configured provider quota; run it only against a development environment.
 
-For this host-run mode, keep `DATABASE_URL`, `REDIS_URL`, `S3_ENDPOINT_URL`, and
-`OLLAMA_URL` pointed at their localhost ports. Piper works without an explicit
-voices directory and downloads its voice on the first readiness or synthesis
-request.
+## Production deployment
 
-Contract tests use real infrastructure and are opt-in (`pytest -m contract`).
-`make interview-sim` creates synthetic data and uses configured provider quota;
-run it only against a development environment.
-For a minimal DeepSeek connectivity check, activate the backend environment and
-run `python model_test.py`; it reads `DEEPSEEK_API_KEY` from the repository-root
-`.env` file or the process environment.
-
-For frontend development without Docker (Node.js 22.12+):
-
-```bash
-cd frontend
-npm ci
-VITE_PROXY_TARGET=http://127.0.0.1:8005 npm run dev
-npm run build
-npm run lint
-npm run test
-```
-
-The Vite dev server proxies same-origin `/api` and `/ws` traffic to
-`VITE_PROXY_TARGET`. `VITE_API_URL` and `VITE_WS_URL` remain available when a
-deployment intentionally bypasses that proxy; none of these variables may
-contain secrets.
-
-The Compose API and worker bind-mount the backend for development. Restart the
-worker after changing worker code. The Dockerfile includes development tools;
-this Compose configuration is not a hardened production deployment.
-
-## Production container deployment
-
-The production reference stack uses multi-stage images, an unprivileged API
-runtime, an Nginx-served frontend, same-origin REST/WebSocket proxying,
-health-gated startup, automatic Alembic migrations, persistent Redis state, and
-restart policies.
+The production reference stack uses multi-stage images, an unprivileged API runtime, an Nginx-served frontend, same-origin REST/WebSocket proxying, health-gated startup, automatic Alembic migrations, persistent Redis state, and restart policies.
 
 ```bash
 cp .env.production.example .env.production
@@ -207,17 +189,9 @@ docker compose --env-file .env.production -f compose.production.yml up -d --buil
 docker compose --env-file .env.production -f compose.production.yml ps
 ```
 
-Terminate TLS in front of port 80 and expose the S3 API through the hostname in
-`S3_PUBLIC_ENDPOINT_URL`. The object-storage administration console binds only
-to `127.0.0.1:9001` in the production stack. The production Compose file also
-runs and preloads the local Ollama fallback. On a small CPU-only VM it may be
-slow; keep Whisper `base` as shown in the example configuration and size the VM
-for both speech and language models.
+Terminate TLS in front of port 80 and expose the S3 API through the hostname in `S3_PUBLIC_ENDPOINT_URL`. The object-storage administration console binds only to `127.0.0.1:9001` in the production stack. Do not deploy with example credentials. Keep `.env.production` outside version control and back up PostgreSQL and object-storage volumes.
 
-Do not deploy with example credentials. Keep `.env.production` outside version
-control and back up the PostgreSQL and object-storage volumes.
-
-## Structure
+## Repository structure
 
 ```text
 backend/
@@ -231,31 +205,9 @@ backend/
     ws/          Live interview transport
   alembic/       Database migrations
   tests/         Unit, API, and provider contract tests
-  Dockerfile
 frontend/
   src/
     components/  Layout, protected routes, and shared UI components
     features/    Authentication, interviews, and practice reports
     lib/         API client, auth context, and shared types
-  Dockerfile     Development server image
-architecture.md  System design and data flows
 ```
-
-## Privacy and deployment safety
-
-Resumes, transcripts, recordings, backups, and credentials must remain private.
-Authenticated users can export their data at `GET /api/me/data-export` and erase
-their account at `POST /api/me/erase`. Data persists until deleted; there is no
-automatic retention schedule.
-
-The example PostgreSQL, object-storage, and JWT credentials are development defaults.
-Replace them, configure HTTPS and secure cookies, restrict exposed infrastructure
-ports, and review access controls before deploying.
-
-Historical Alembic revisions for the previously published coding feature remain
-to preserve migration continuity. The active API, frontend, and Compose stack do
-not include that feature or its execution sandbox.
-
-`make backup` writes database snapshots to the ignored `backups/` directory.
-`make restore-rehearsal file=backups/<snapshot>` restores into a separate rehearsal
-database, not the application database.
