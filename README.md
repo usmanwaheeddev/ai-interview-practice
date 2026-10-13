@@ -129,22 +129,6 @@ make migrate
 
 DeepSeek handles language requests first; Ollama provides a local fallback when DeepSeek is unavailable. Keep `.env` private and do not place API keys in `VITE_*` settings. Open <http://localhost:5173> to use the application.
 
-### Reprocess existing recordings
-
-New and existing recordings are combined into one report player after upload. To create master files for recordings captured before this feature, run the reprocessor from the worker container after updating the application:
-
-```bash
-make reprocess-recordings
-```
-
-If older uploads were stored but never marked ready, first run:
-
-```bash
-make repair-recordings
-```
-
-This verifies every chunk exists in object storage and that chunk indexes are contiguous before marking an interview ready and combining it. It keeps original chunks and reports incomplete recordings without changing them.
-
 ## Architecture and capabilities
 
 See [architecture.md](architecture.md) for runtime components, data flows, domain models, and provider behavior.
@@ -181,7 +165,7 @@ pytest
 
 For frontend development without Docker, follow the frontend commands in part 1. The Vite server proxies `/api` and `/ws` to `VITE_PROXY_TARGET`; frontend variables must not contain secrets.
 
-Contract tests use real infrastructure and are opt-in with `pytest -m contract`. `make interview-sim` creates synthetic data and uses configured provider quota; run it only against a development environment.
+Contract tests use real infrastructure and are opt-in with `pytest -m contract`.
 
 ## Production deployment
 

@@ -1,4 +1,4 @@
-.PHONY: up up-backend down migrate migration seed test test-backend test-frontend lint lint-backend lint-frontend verify interview-cli interview-sim ollama-pull logs backup restore-rehearsal reprocess-recordings repair-recordings
+.PHONY: up up-backend down migrate migration seed test test-backend test-frontend lint lint-backend lint-frontend verify ollama-pull logs backup restore-rehearsal
 
 up:
 	@test -f .env || cp .env.example .env
@@ -20,12 +20,6 @@ logs:
 
 migrate:
 	docker compose exec api alembic upgrade head
-
-reprocess-recordings:
-	docker compose exec worker python -m app.cli.reprocess_recordings
-
-repair-recordings:
-	docker compose exec worker python -m app.cli.reprocess_recordings --repair-ready
 
 migration:
 	docker compose exec api alembic revision --autogenerate -m "$(m)"
@@ -55,12 +49,6 @@ lint-frontend:
 verify: test-backend lint-backend test-frontend lint-frontend
 	docker compose --profile frontend exec web npm run build
 	docker compose --profile frontend config --quiet
-
-interview-cli:
-	docker compose exec api python -m app.cli.latency_spike --turns $(or $(turns),10)
-
-interview-sim:
-	docker compose exec api python -m app.cli.mock_smoke
 
 ollama-pull:
 	docker compose exec ollama ollama pull $(or $(model),llama3.2:3b)

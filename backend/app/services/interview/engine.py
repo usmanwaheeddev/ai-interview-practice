@@ -1,9 +1,8 @@
 """The interview engine — orchestrates one session's turn-taking. Pure
 turn-taking logic in memory; persistence (Postgres, Redis) is a thin layer
 around this, not mixed into it, so the same engine drives both the WebSocket
-handler (Phase 3 build item, real audio) and `make interview-sim` (headless,
-scripted text turns) — see architecture.md §2's sequence diagram, which this
-class implements minus the audio I/O.
+handler (Phase 3 build item, real audio) — see architecture.md §2's sequence
+diagram, which this class implements minus the audio I/O.
 """
 
 from dataclasses import dataclass, field

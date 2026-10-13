@@ -124,7 +124,7 @@ async def test_fake_director_gives_exactly_one_follow_up_per_topic() -> None:
 
 
 async def test_repeated_clarify_is_capped_like_follow_up() -> None:
-    """Regression test — found running interview-sim against a real LLM: a
+    """Regression test — found during a headless run against a real LLM: a
     model favouring 'clarify' over 'follow_up' looped on one topic
     until the *time* budget eventually saved it, since CLARIFY didn't
     originally count against the same per-topic cap. See memory.md."""
