@@ -43,9 +43,3 @@ jobs:
       - run: npm test
       - run: npm run build
 
-  containers:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - run: docker build -f backend/Dockerfile.prod -t interview-api ./backend
-      - run: docker build -f frontend/Dockerfile.prod -t interview-web ./frontend

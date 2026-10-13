@@ -2,8 +2,8 @@ import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { Link, NavLink, useLocation } from "react-router-dom";
 import { useAuth } from "../../lib/auth";
 
-type IconName = "add" | "history" | "menu" | "panel" | "logout" | "language";
-export type NavigationSection = "new" | "language" | "history";
+type IconName = "add" | "history" | "menu" | "panel" | "logout" | "language" | "profile";
+export type NavigationSection = "new" | "language" | "history" | "profile";
 
 function Icon({ name, className = "h-5 w-5" }: { name: IconName; className?: string }) {
   const paths: Record<IconName, ReactNode> = {
@@ -13,6 +13,7 @@ function Icon({ name, className = "h-5 w-5" }: { name: IconName; className?: str
     panel: <path d="M4 5h16v14H4zM9 5v14" />,
     logout: <path d="M10 17l5-5-5-5m5 5H3m11-7h5a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2h-5" />,
     language: <path d="M4 5h9M8.5 3v2m0 0c0 4-1.5 8-5.5 10M6 8c1 3 3 5 6 6.5M14 21l4-9 4 9m-6.5-3h5" />,
+    profile: <><circle cx="12" cy="8" r="4" /><path d="M4 21a8 8 0 0 1 16 0" /></>,
   };
 
   return (
@@ -35,6 +36,7 @@ const navigation = [
   { section: "new" as const, label: "New interview", to: "/practice/new", icon: "add" as const },
   { section: "language" as const, label: "Language interview", to: "/practice/language/new", icon: "language" as const },
   { section: "history" as const, label: "Interview history", to: "/mock-interviews", icon: "history" as const },
+  { section: "profile" as const, label: "Profile", to: "/profile", icon: "profile" as const },
 ];
 
 export function AppLayout({

@@ -11,6 +11,7 @@ import { CreatePracticeInterviewPage } from "./features/practice/CreatePracticeI
 import { CreateLanguageInterviewPage } from "./features/practice/CreateLanguageInterviewPage";
 import { PracticeReportPage } from "./features/practice/PracticeReportPage";
 import { InterviewHistoryPage } from "./features/practice/InterviewHistoryPage";
+import { ProfilePage } from "./features/profile/ProfilePage";
 import { useAuth } from "./lib/auth";
 
 function HomeRoute() {
@@ -28,6 +29,7 @@ export function App() {
       <Route path="/login" element={<LoginPage />} />
       <Route path="/register" element={<RegisterCandidatePage />} />
       <Route path="/privacy-notice" element={<PrivacyNoticePage />} />
+      <Route path="/profile" element={<ProtectedRoute><ProfilePage /></ProtectedRoute>} />
 
       <Route path="/practice/new" element={<ProtectedRoute><CreatePracticeInterviewPage /></ProtectedRoute>} />
       <Route path="/practice/language/new" element={<ProtectedRoute><CreateLanguageInterviewPage /></ProtectedRoute>} />

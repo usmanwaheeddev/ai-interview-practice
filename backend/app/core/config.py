@@ -45,7 +45,7 @@ class Settings(BaseSettings):
 
     cors_origins: list[str] = ["http://localhost:5173"]
     # Enable only when the API is reachable exclusively through a trusted
-    # reverse proxy, as in compose.production.yml.
+    # reverse proxy.
     trust_proxy_headers: bool = False
 
     # Provider selection — see architecture.md §7

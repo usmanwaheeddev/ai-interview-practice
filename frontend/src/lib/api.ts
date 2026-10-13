@@ -1,6 +1,6 @@
-// Same-origin by default so production deployments work behind a reverse
-// proxy without embedding a host name in the JavaScript bundle. Development
-// Compose supplies an explicit URL for the Vite server.
+// Same-origin by default so deployments behind a reverse proxy do not need a
+// host name embedded in the JavaScript bundle. Local Compose supplies an
+// explicit URL for the Vite server.
 export const API_URL = import.meta.env.VITE_API_URL ?? "/api";
 
 export class ApiError extends Error {

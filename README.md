@@ -167,20 +167,6 @@ For frontend development without Docker, follow the frontend commands in part 1.
 
 Contract tests use real infrastructure and are opt-in with `pytest -m contract`.
 
-## Production deployment
-
-The production reference stack uses multi-stage images, an unprivileged API runtime, an Nginx-served frontend, same-origin REST/WebSocket proxying, health-gated startup, automatic Alembic migrations, persistent Redis state, and restart policies.
-
-```bash
-cp .env.production.example .env.production
-# Replace every CHANGE_ME value and configure public HTTPS origins.
-docker compose --env-file .env.production -f compose.production.yml config --quiet
-docker compose --env-file .env.production -f compose.production.yml up -d --build
-docker compose --env-file .env.production -f compose.production.yml ps
-```
-
-Terminate TLS in front of port 80 and expose the S3 API through the hostname in `S3_PUBLIC_ENDPOINT_URL`. The object-storage administration console binds only to `127.0.0.1:9001` in the production stack. Do not deploy with example credentials. Keep `.env.production` outside version control and back up PostgreSQL and object-storage volumes.
-
 ## Repository structure
 
 ```text

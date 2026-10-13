@@ -21,7 +21,7 @@ It reflects the code as it exists today, not a roadmap.
 
 ## System overview
 
-The web frontend talks to a single FastAPI process over both REST and WebSocket. That process shares a Postgres database and a Redis instance with a background worker, which runs the slow or unreliable work — resume parsing, interview-plan generation, and scoring — as queued jobs instead of blocking a request. Every AI capability (LLM, speech-to-text, text-to-speech) sits behind a small provider interface, so the app can run entirely on self-hosted, deterministic ("fake") providers in tests and CI, and switch to real cloud/self-hosted providers in development and production without touching business logic.
+The web frontend talks to a single FastAPI process over both REST and WebSocket. That process shares a Postgres database and a Redis instance with a background worker, which runs the slow or unreliable work — resume parsing, interview-plan generation, and scoring — as queued jobs instead of blocking a request. Every AI capability (LLM, speech-to-text, text-to-speech) sits behind a small provider interface, so the app can run entirely on self-hosted, deterministic ("fake") providers in tests and CI, and switch to real cloud/self-hosted providers without touching business logic.
 
 ```mermaid
 flowchart LR
@@ -318,7 +318,7 @@ Login and registration are rate-limited per IP via Redis (register: 5/hour, logi
 
 ## Storage
 
-`S3StorageProvider` talks to RustFS in development and any real S3-compatible service in production, using two separate clients: one against the internal endpoint (backend-to-storage I/O) and one purely for signing presigned URLs against a browser-reachable endpoint — the browser cannot resolve the internal Docker hostname the backend uses.
+`S3StorageProvider` talks to RustFS in the Docker setup or any S3-compatible service, using two separate clients: one against the internal endpoint (backend-to-storage I/O) and one purely for signing presigned URLs against a browser-reachable endpoint — the browser cannot resolve the internal Docker hostname the backend uses.
 
 Stored objects:
 - **Resumes** — `resumes/{user_id}/{uuid}.{pdf|docx}`
